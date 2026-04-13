@@ -626,7 +626,7 @@ Use clear, professional language suitable for different audiences.`;
 }
 
 // Self-Review and Quality Functions
-function buildSelfReviewPrompt(testCases, definitionOfDone) {
+function buildSelfReviewPrompt(testCases, definitionOfDone, knowledgeContext, examples) {
   const dodContext = definitionOfDone.length > 0 ? `
 # Definition of Done Criteria
 
@@ -638,7 +638,26 @@ ${dod.content}
 `).join('\n')}
 ` : '';
 
-  return `${dodContext}
+  const examplesContext = examples.length > 0 ? `
+# Example Test Cases for Reference
+
+Review the test cases against these high-quality examples:
+
+${examples.map((example, index) => `
+## Example ${index + 1}: ${example.name}
+
+### Example Test Cases:
+${example.testCases}
+
+---
+`).join('\n')}
+` : '';
+
+  return `${knowledgeContext}
+
+${dodContext}
+
+${examplesContext}
 
 # Test Cases to Review
 
@@ -648,7 +667,10 @@ ${testCases}
 
 # Your Task
 
-Review the test cases above and evaluate them against ${definitionOfDone.length > 0 ? 'the Definition of Done criteria' : 'general quality standards'}.
+Review the test cases above and evaluate them against:
+${definitionOfDone.length > 0 ? '- The Definition of Done criteria' : '- General quality standards'}
+- The GL Assessment testing standards provided
+${examples.length > 0 ? '- The example test cases for comparison' : ''}
 
 Provide a structured review in this format:
 
@@ -875,6 +897,7 @@ ${example.testCases}
   let currentTestCases = '';
   let iteration = 0;
   let isReadyForUse = false;
+  let lastReview = '';
 
   // Iteration loop
   while (iteration < MAX_ITERATIONS && !isReadyForUse) {
@@ -901,11 +924,16 @@ ${example.testCases}
       console.log('  ✓ Improved test cases generated');
     }
 
-    // Only do self-review if we have DoD and we're not on the last iteration
-    if (definitionOfDone.length > 0 && iteration < MAX_ITERATIONS) {
-      console.log('  → Performing self-review against Definition of Done...');
-      const reviewPrompt = buildSelfReviewPrompt(currentTestCases, definitionOfDone);
-      const lastReview = await invokeClaudeOnBedrock(reviewPrompt);
+    // Always do self-review unless we're on the last iteration
+    if (iteration < MAX_ITERATIONS) {
+      if (definitionOfDone.length > 0) {
+        console.log('  → Performing self-review against Definition of Done, knowledge base, and examples...');
+      } else {
+        console.log('  → Performing self-review against knowledge base, examples, and general quality standards...');
+      }
+
+      const reviewPrompt = buildSelfReviewPrompt(currentTestCases, definitionOfDone, knowledgeContext, examples);
+      lastReview = await invokeClaudeOnBedrock(reviewPrompt);
       console.log('  ✓ Self-review complete');
 
       // Check if ready
@@ -918,26 +946,19 @@ ${example.testCases}
         console.log('  ⚠ Issues found - will iterate');
       }
     } else {
-      // No DoD or last iteration - accept the output
+      // Last iteration - accept the output
       isReadyForUse = true;
-      if (definitionOfDone.length === 0) {
-        console.log('  ℹ No Definition of Done - skipping self-review');
-      }
+      console.log('  ℹ Maximum iterations reached - accepting current version');
     }
   }
 
   console.log(`\n✓ Test generation complete after ${iteration} iteration(s)`);
 
   // Generate quality score
-  let qualityScore = null;
-  if (definitionOfDone.length > 0) {
-    console.log('📊 Generating quality score...');
-    const scoringPrompt = buildQualityScoringPrompt(currentTestCases, definitionOfDone);
-    qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
-    console.log('✓ Quality score generated');
-  } else {
-    console.log('ℹ No Definition of Done - skipping quality scoring');
-  }
+  console.log('📊 Generating quality score...');
+  const scoringPrompt = buildQualityScoringPrompt(currentTestCases, definitionOfDone);
+  const qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
+  console.log('✓ Quality score generated');
 
   console.log('============================================');
   console.log('');
