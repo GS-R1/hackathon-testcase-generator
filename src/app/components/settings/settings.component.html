@@ -1,0 +1,90 @@
+<div class="settings-container">
+  <div class="header">
+    <h1>Settings</h1>
+    <p class="subtitle">Configure your Azure DevOps and Claude API credentials</p>
+  </div>
+
+  <div class="success-message" *ngIf="success">
+    {{ success }}
+  </div>
+
+  <div class="error-message" *ngIf="error">
+    <strong>Error:</strong> {{ error }}
+  </div>
+
+  <div class="settings-form">
+    <div class="section">
+      <h2>Azure DevOps Configuration</h2>
+      <p class="help-text">
+        This application uses Azure CLI authentication. Make sure you're logged in with <code>az login</code>.
+      </p>
+
+      <div class="auth-status">
+        <div class="status-indicator" [ngClass]="{'authenticated': settings.azureCliAuthenticated, 'not-authenticated': !settings.azureCliAuthenticated}">
+          <span class="status-icon">{{ settings.azureCliAuthenticated ? '✓' : '✗' }}</span>
+          <span class="status-text">
+            {{ settings.azureCliAuthenticated ? 'Azure CLI Authenticated' : 'Not Authenticated - Run "az login"' }}
+          </span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Organization URL:</label>
+        <input type="text" [(ngModel)]="settings.azureDevOpsOrg" class="form-control"
+               placeholder="https://dev.azure.com/your-org">
+        <small>Default: https://dev.azure.com/gl-development</small>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Claude AI Configuration</h2>
+      <p class="help-text">
+        This application uses AWS Bedrock to access Claude AI.
+      </p>
+
+      <div class="auth-status">
+        <div class="status-indicator authenticated">
+          <span class="status-icon">✓</span>
+          <span class="status-text">Using AWS Bedrock ({{ settings.bedrockModelId }})</span>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>AWS Region:</label>
+        <input type="text" [value]="settings.awsRegion" class="form-control" readonly>
+      </div>
+
+      <div class="form-group">
+        <label>AWS Profile:</label>
+        <input type="text" [value]="settings.awsProfile" class="form-control" readonly>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Default Values</h2>
+      <p class="help-text">Set default values to speed up your workflow</p>
+
+      <div class="form-group">
+        <label>Default Project:</label>
+        <input type="text" [(ngModel)]="settings.defaultProject" class="form-control"
+               placeholder="e.g., Testwise">
+      </div>
+
+      <div class="form-group">
+        <label>Default Repository ID:</label>
+        <input type="text" [(ngModel)]="settings.defaultRepository" class="form-control"
+               placeholder="Repository GUID or name">
+        <small>Used for PR analysis</small>
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button class="btn btn-primary" (click)="saveSettings()" [disabled]="loading">
+        {{ loading ? 'Saving...' : 'Save Settings' }}
+      </button>
+      <button class="btn btn-secondary" (click)="loadSettings()" [disabled]="loading">
+        Reset
+      </button>
+    </div>
+  </div>
+</div>
