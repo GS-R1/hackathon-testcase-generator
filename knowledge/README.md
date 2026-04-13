@@ -36,11 +36,19 @@ Technical platform context including:
 - Environment structure
 
 ### [examples/](examples/)
-Example PBIs and their high-quality test cases:
+Example PBIs and their high-quality test cases (Optional):
 - Located in `examples/pbis/` (PBI JSON files) and `examples/test-cases/` (test case markdown files)
 - Files must have matching names (e.g., `user-login.json` and `user-login.md`)
 - Claude learns from these examples to generate similar quality test cases
 - See [examples/README.md](examples/README.md) for detailed instructions on adding examples
+
+### [examples/definition-of-done/](examples/definition-of-done/)
+Definition of Done quality criteria (Optional):
+- Markdown files defining what makes test cases "ready for use"
+- Used by Claude for self-review and iterative improvement
+- Enables automatic quality scoring (1-10) of generated test cases
+- If empty, Claude generates without quality validation
+- See [examples/definition-of-done/README.md](examples/definition-of-done/README.md) for detailed instructions
 
 ## How It's Used
 

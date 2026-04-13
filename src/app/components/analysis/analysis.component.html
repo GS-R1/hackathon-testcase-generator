@@ -49,14 +49,46 @@
       <button class="btn btn-secondary" (click)="clearResults()">Clear Results</button>
     </div>
 
-    <div class="result-card" *ngFor="let result of analysisResults">
+    <div class="result-card" *ngFor="let result of analysisResults; let last = last">
       <div class="result-header">
         <button class="btn btn-small" (click)="copyToClipboard(result.content)">Copy to Clipboard</button>
       </div>
+
+      <!-- Quality Score Section (if available) -->
+      <div class="quality-score-section" *ngIf="result.qualityScore">
+        <div class="quality-score-content markdown-content" [innerHTML]="result.qualityScoreHtml">
+        </div>
+        <div class="iterations-info" *ngIf="result.iterations">
+          <small>Generated after {{ result.iterations }} iteration(s)</small>
+        </div>
+      </div>
+
       <div class="result-content markdown-content" [innerHTML]="result.htmlContent">
       </div>
       <div class="result-timestamp">
         Generated at {{ result.timestamp | date:'short' }}
+      </div>
+
+      <!-- Feedback Section (only show on most recent result) -->
+      <div class="feedback-section" *ngIf="last">
+        <h3>Provide Feedback (Optional)</h3>
+        <p class="feedback-instructions">
+          If the test cases need improvement, provide specific feedback below and click "Regenerate with Feedback".
+          Claude will create improved test cases based on your input.
+        </p>
+        <textarea
+          [(ngModel)]="userFeedback"
+          class="feedback-textarea"
+          placeholder="Example: 'Add more edge cases for invalid email formats' or 'Include accessibility tests for keyboard navigation'"
+          rows="4"
+        ></textarea>
+        <button
+          class="btn btn-primary"
+          (click)="generateTestCases(true)"
+          [disabled]="loading || !userFeedback.trim()"
+        >
+          {{ loading ? 'Regenerating...' : 'Regenerate with Feedback' }}
+        </button>
       </div>
     </div>
   </div>
