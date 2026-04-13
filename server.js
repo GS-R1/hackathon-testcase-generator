@@ -195,6 +195,94 @@ app.post('/api/analyze', async (req, res) => {
 // Knowledge Base Cache
 let knowledgeCache = null;
 
+// Examples Cache
+let examplesCache = null;
+
+function loadExamples() {
+  if (examplesCache !== null) {
+    return examplesCache; // Return cached (even if empty array)
+  }
+
+  const examples = [];
+  const pbisPath = path.join(__dirname, 'knowledge/examples/pbis');
+  const testCasesPath = path.join(__dirname, 'knowledge/examples/test-cases');
+
+  try {
+    // Check if directories exist
+    if (!fs.existsSync(pbisPath) || !fs.existsSync(testCasesPath)) {
+      console.log('ℹ Examples folders not found - skipping examples');
+      examplesCache = [];
+      return examplesCache;
+    }
+
+    // Read all files from both directories
+    const pbiFiles = fs.readdirSync(pbisPath).filter(f => f.endsWith('.json') && f !== '.gitkeep');
+    const testCaseFiles = fs.readdirSync(testCasesPath).filter(f => f.endsWith('.md') && f !== '.gitkeep');
+
+    if (pbiFiles.length === 0 && testCaseFiles.length === 0) {
+      console.log('ℹ No example files found in examples folders');
+      examplesCache = [];
+      return examplesCache;
+    }
+
+    console.log('');
+    console.log('📝 Loading Examples...');
+    console.log('--------------------------------------------');
+
+    // Match PBI files with their corresponding test case files
+    pbiFiles.forEach(pbiFile => {
+      const baseName = path.basename(pbiFile, '.json');
+      const testCaseFile = `${baseName}.md`;
+
+      if (testCaseFiles.includes(testCaseFile)) {
+        try {
+          const pbiContent = fs.readFileSync(path.join(pbisPath, pbiFile), 'utf-8');
+          const testCaseContent = fs.readFileSync(path.join(testCasesPath, testCaseFile), 'utf-8');
+
+          examples.push({
+            name: baseName,
+            pbi: pbiContent,
+            testCases: testCaseContent
+          });
+
+          console.log(`✓ Loaded example pair: ${baseName}`);
+          console.log(`  → PBI: ${pbiFile} (${(pbiContent.length / 1024).toFixed(1)} KB)`);
+          console.log(`  → Test Cases: ${testCaseFile} (${(testCaseContent.length / 1024).toFixed(1)} KB)`);
+        } catch (error) {
+          console.log(`✗ Error loading example pair ${baseName}:`, error.message);
+        }
+      } else {
+        console.log(`⚠ PBI file ${pbiFile} has no matching test case file (expected: ${testCaseFile})`);
+      }
+    });
+
+    // Warn about orphaned test case files
+    testCaseFiles.forEach(testCaseFile => {
+      const baseName = path.basename(testCaseFile, '.md');
+      const pbiFile = `${baseName}.json`;
+      if (!pbiFiles.includes(pbiFile)) {
+        console.log(`⚠ Test case file ${testCaseFile} has no matching PBI file (expected: ${pbiFile})`);
+      }
+    });
+
+    console.log('--------------------------------------------');
+    if (examples.length > 0) {
+      console.log(`✓ Loaded ${examples.length} example pair(s)`);
+    } else {
+      console.log('ℹ No matching example pairs found');
+    }
+    console.log('');
+
+    examplesCache = examples;
+    return examplesCache;
+  } catch (error) {
+    console.error('✗ Error loading examples:', error.message);
+    console.log('');
+    examplesCache = [];
+    return examplesCache;
+  }
+}
+
 function loadKnowledgeBase() {
   if (knowledgeCache) {
     console.log('📚 Using cached knowledge base');
@@ -244,6 +332,7 @@ function buildTestCasesPrompt(data) {
   console.log('--------------------------------------------');
 
   const knowledge = loadKnowledgeBase();
+  const examples = loadExamples();
 
   let knowledgeContext = '';
   if (knowledge) {
@@ -255,6 +344,19 @@ function buildTestCasesPrompt(data) {
     console.log('🎯 Test Generation Strategy:');
     console.log('  → Test Case #1: Happy Path (mandatory first test)');
     console.log('  → Followed by: Edge cases, negative tests, accessibility, etc.');
+
+    if (examples.length > 0) {
+      console.log('');
+      console.log('📋 Using Example Test Cases:');
+      examples.forEach((example, index) => {
+        console.log(`  ${index + 1}. ${example.name}`);
+      });
+      console.log('  → Claude will learn from these examples');
+    } else {
+      console.log('');
+      console.log('ℹ No examples provided - generating without reference examples');
+    }
+
     console.log('--------------------------------------------');
     console.log('✓ Prompt ready with full GL Assessment context');
     console.log('');
@@ -276,9 +378,27 @@ ${knowledge.platformOverview}
 
 ---
 
+${examples.length > 0 ? `
+# EXAMPLES: Learn from High-Quality Test Cases
+
+Below are examples of well-written PBIs and their corresponding test cases. Use these as references for format, structure, quality, and level of detail when generating test cases.
+
+${examples.map((example, index) => `
+## Example ${index + 1}: ${example.name}
+
+### Example PBI:
+${example.pbi}
+
+### Example Test Cases:
+${example.testCases}
+
+---
+`).join('\n')}
+
+` : ''}
 # YOUR TASK
 
-Now, using the standards and context above, analyze the following Product Backlog Item (PBI) and generate comprehensive test cases.
+Now, using the standards, context${examples.length > 0 ? ', and examples' : ''} above, analyze the following Product Backlog Item (PBI) and generate comprehensive test cases${examples.length > 0 ? ' in the same high-quality format as the examples' : ''}.
 `;
   } else {
     console.log('⚠ Warning: Knowledge base not loaded - generating without GL context');
