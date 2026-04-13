@@ -35,6 +35,13 @@ Technical platform context including:
 - Integration points (Wonde, Clever)
 - Environment structure
 
+### [examples/](examples/)
+Example PBIs and their high-quality test cases:
+- Located in `examples/pbis/` (PBI JSON files) and `examples/test-cases/` (test case markdown files)
+- Files must have matching names (e.g., `user-login.json` and `user-login.md`)
+- Claude learns from these examples to generate similar quality test cases
+- See [examples/README.md](examples/README.md) for detailed instructions on adding examples
+
 ## How It's Used
 
 When you click "Generate Test Cases" in the application, the server reads these knowledge files and includes them in the prompt sent to Claude AI. This gives Claude the context needed to generate relevant, comprehensive test cases that align with GL Assessment's standards.
