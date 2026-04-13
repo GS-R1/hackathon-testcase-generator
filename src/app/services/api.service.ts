@@ -17,13 +17,14 @@ export class ApiService {
     );
   }
 
-  async analyzeWithClaude(data: any, analysisType: 'testCases' | 'impactAnalysis' | 'documentation', userFeedback?: string, previousTestCases?: string) {
+  async analyzeWithClaude(data: any, analysisType: 'testCases' | 'impactAnalysis' | 'documentation' | 'pbiQualityAssessment', userFeedback?: string, previousTestCases?: string, additionalContext?: string) {
     return firstValueFrom(
       this.http.post<any>(`${this.baseUrl}/analyze`, {
         data,
         analysisType,
         userFeedback,
-        previousTestCases
+        previousTestCases,
+        additionalContext
       })
     );
   }

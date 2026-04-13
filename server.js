@@ -7,6 +7,7 @@ const azdev = require('azure-devops-node-api');
 const { WorkItemExpand } = require('azure-devops-node-api/interfaces/WorkItemTrackingInterfaces');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
 const { fromIni } = require('@aws-sdk/credential-provider-ini');
+const PBIQualityAssessor = require('./pbi-quality-assessor');
 
 const app = express();
 const PORT = 3000;
@@ -151,7 +152,7 @@ app.get('/api/workitem/:id', async (req, res) => {
 // Analyze with Claude
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { data, analysisType, userFeedback, previousTestCases } = req.body;
+    const { data, analysisType, userFeedback, previousTestCases, additionalContext } = req.body;
 
     console.log('');
     console.log('============================================');
@@ -159,11 +160,19 @@ app.post('/api/analyze', async (req, res) => {
     console.log('============================================');
 
     if (analysisType === 'testCases') {
+      // Log additional context if provided
+      if (additionalContext) {
+        console.log('📝 Additional Context from PBI Quality Assessment:');
+        console.log(`   ${additionalContext.substring(0, 150).replace(/\n/g, '\n   ')}${additionalContext.length > 150 ? '...' : ''}`);
+      } else {
+        console.log('ℹ No additional context provided from PBI Quality Assessment');
+      }
+
       // If user provided feedback, use direct improvement flow
       if (userFeedback && previousTestCases) {
         console.log('🔄 User Feedback Mode - Improving existing test cases...');
         console.log(`   Feedback: "${userFeedback.substring(0, 100)}${userFeedback.length > 100 ? '...' : ''}"`);
-        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback);
+        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback, additionalContext);
 
         res.json({
           success: true,
@@ -173,7 +182,7 @@ app.post('/api/analyze', async (req, res) => {
         });
       } else {
         // Use iterative quality generation for initial test cases
-        const result = await generateTestCasesWithQuality(data);
+        const result = await generateTestCasesWithQuality(data, additionalContext);
 
         res.json({
           success: true,
@@ -182,6 +191,33 @@ app.post('/api/analyze', async (req, res) => {
           iterations: result.iterations
         });
       }
+    } else if (analysisType === 'pbiQualityAssessment') {
+      // PBI Quality Assessment using specialized assessor
+      console.log('📊 Using PBI Quality Assessor with rich system prompt and examples...');
+      const assessor = new PBIQualityAssessor();
+      const payload = assessor.buildBedrockPayload(data);
+
+      const client = getBedrockClient();
+      const command = new InvokeModelCommand({
+        modelId: BEDROCK_MODEL_ID,
+        contentType: 'application/json',
+        accept: 'application/json',
+        body: JSON.stringify(payload)
+      });
+
+      console.log(`🤖 Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
+      const response = await client.send(command);
+      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      const result = responseBody.content[0].text;
+
+      console.log('✓ Claude response received from Bedrock');
+      console.log('============================================');
+      console.log('');
+
+      res.json({
+        success: true,
+        data: result
+      });
     } else {
       // Other analysis types use simple generation
       let prompt = '';
@@ -415,7 +451,7 @@ function loadKnowledgeBase() {
 }
 
 // Prompt builders
-function buildTestCasesPrompt(data) {
+function buildTestCasesPrompt(data, additionalContext) {
   console.log('');
   console.log('🧠 Building test case generation prompt...');
   console.log('--------------------------------------------');
@@ -500,6 +536,18 @@ Now, using the standards, context${examples.length > 0 ? ', and examples' : ''} 
 ## PBI Details
 
 ${JSON.stringify(data, null, 2)}
+${additionalContext ? `
+
+## Additional Context from Quality Assessment
+
+The following information was provided to clarify missing or unclear aspects of the PBI:
+
+${additionalContext}
+
+**IMPORTANT**: Use this additional context to generate more accurate and comprehensive test cases. This information addresses gaps identified during quality assessment.
+
+---
+` : ''}
 
 ## Requirements
 
@@ -736,7 +784,7 @@ Provide your assessment in this EXACT format:
 Keep your response concise and focused.`;
 }
 
-async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback) {
+async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext) {
   const knowledge = loadKnowledgeBase();
   const definitionOfDone = loadDefinitionOfDone();
 
@@ -769,6 +817,16 @@ ${knowledge.platformOverview}
 ## PBI Details
 
 ${JSON.stringify(pbiData, null, 2)}
+${additionalContext ? `
+
+## Additional Context from Quality Assessment
+
+The following information was provided to clarify missing or unclear aspects of the PBI:
+
+${additionalContext}
+
+---
+` : ''}
 
 ---
 
@@ -822,7 +880,7 @@ Generate the complete improved test plan now.`;
   };
 }
 
-async function generateTestCasesWithQuality(pbiData) {
+async function generateTestCasesWithQuality(pbiData, additionalContext) {
   const MAX_ITERATIONS = 3;
   const knowledge = loadKnowledgeBase();
   const examples = loadExamples();
@@ -884,7 +942,7 @@ ${example.testCases}
     if (iteration === 1) {
       // First generation
       console.log('  → Generating initial test cases...');
-      const initialPrompt = buildTestCasesPrompt(pbiData);
+      const initialPrompt = buildTestCasesPrompt(pbiData, additionalContext);
       currentTestCases = await invokeClaudeOnBedrock(initialPrompt);
       console.log('  ✓ Initial test cases generated');
     } else {

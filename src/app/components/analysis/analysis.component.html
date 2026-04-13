@@ -35,12 +35,73 @@
       <p><strong>Description:</strong></p>
       <div [innerHTML]="itemData.fields?.['System.Description']" class="description"></div>
     </div>
+  </div>
 
-    <div class="analysis-options">
-      <button class="btn btn-success" (click)="generateTestCases()" [disabled]="loading">
-        {{ loading ? 'Generating...' : 'Generate Manual Test Cases' }}
+  <div class="quality-assessment" *ngIf="itemData">
+    <h2>PBI Quality Assessment</h2>
+
+    <!-- Loading State -->
+    <div class="quality-card quality-loading" *ngIf="qualityAssessmentLoading">
+      <div class="quality-loading-content">
+        <div class="spinner"></div>
+        <p>Analyzing PBI quality...</p>
+      </div>
+    </div>
+
+    <!-- Error State -->
+    <div class="quality-card quality-error" *ngIf="!qualityAssessmentLoading && qualityAssessmentError">
+      <div class="quality-header">
+        <span class="quality-icon">⚠</span>
+        <span class="quality-category">ERROR</span>
+      </div>
+      <div class="quality-error-message">
+        <p><strong>Failed to assess quality:</strong> {{ qualityAssessmentError }}</p>
+        <button class="btn btn-small" (click)="assessPBIQuality()">Retry Assessment</button>
+      </div>
+    </div>
+
+    <!-- Success State -->
+    <div class="quality-card" [ngClass]="getQualityCategoryClass()" *ngIf="!qualityAssessmentLoading && !qualityAssessmentError && qualityAssessment">
+      <div class="quality-header">
+        <span class="quality-icon">{{ getQualityCategoryIcon() }}</span>
+        <span class="quality-category">{{ qualityAssessment.quality_category }}</span>
+        <span class="quality-score">Score: {{ qualityAssessment.overall_score }}/100</span>
+        <span class="quality-confidence" [ngClass]="'confidence-' + qualityAssessment.confidence_level.toLowerCase()">
+          <strong>Confidence: {{ qualityAssessment.confidence_level }}</strong>
+        </span>
+      </div>
+
+      <div class="quality-summary">
+        <p>{{ qualityAssessment.summary }}</p>
+      </div>
+
+      <div class="context-prompt" *ngIf="showContextForm && qualityAssessment?.improvement_points?.length">
+        <h4>Provide Additional Context</h4>
+        <p>Fill in the information below to improve test generation quality:</p>
+
+        <div class="improvement-point" *ngFor="let point of qualityAssessment.improvement_points; let i = index">
+          <label>
+            <strong>{{ point.label }}</strong>
+            <span class="prompt-text">{{ point.prompt }}</span>
+          </label>
+          <textarea
+            [(ngModel)]="improvementResponses[i]"
+            class="context-textarea"
+            [placeholder]="point.prompt"
+            rows="3"></textarea>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" (click)="toggleContextForm()" *ngIf="qualityAssessment?.improvement_points?.length">
+        {{ showContextForm ? 'Hide' : 'Add' }} Additional Context
       </button>
     </div>
+  </div>
+
+  <div class="analysis-options" *ngIf="itemData">
+    <button class="btn btn-success" (click)="generateTestCases()" [disabled]="loading">
+      {{ loading ? 'Generating...' : 'Generate Manual Test Cases' }}
+    </button>
   </div>
 
   <div class="results-section" *ngIf="analysisResults.length > 0">
