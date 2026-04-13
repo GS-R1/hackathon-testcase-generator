@@ -35,10 +35,22 @@ The application will automatically:
   - Context-aware using embedded knowledge base
   - Includes functional, UAT, accessibility, and security test scenarios
   - Step-by-step instructions ready for manual testers
+  - **Happy Path first** - Test Case #1 is always the successful scenario
+- **Iterative Quality Improvement**:
+  - Claude self-reviews generated test cases against your Definition of Done
+  - Automatically iterates (up to 3 times) to improve quality
+  - Provides quality score (1-10) with justification
+  - Shows how many iterations were needed
+- **User Feedback Loop**:
+  - Provide specific feedback if test cases need improvement
+  - Regenerate with your feedback incorporated
+  - Iterative refinement until you're satisfied
 - **Embedded Knowledge Base** - No external dependencies required:
   - GL Assessment testing standards (DoR/DoD)
   - Platform architecture and tech stack
   - Domain glossary (CAT4, NGRT, SAS, etc.)
+  - Example PBIs and test cases (optional)
+  - Definition of Done criteria (optional)
 - **Azure CLI Authentication** - Uses your existing `az login` session
 - **Simple Web App** - Runs in your browser, no desktop app issues
 
@@ -48,8 +60,20 @@ The application will automatically:
 2. Click **Fetch PBI**
 3. Review the PBI details displayed
 4. Click **Generate Manual Test Cases**
-5. Claude AI generates comprehensive manual test cases using the embedded knowledge base
-6. Review the step-by-step test instructions and copy to clipboard for your test plan
+5. **Claude generates and self-reviews** (with iterative improvement if Definition of Done is provided):
+   - Generates initial test cases
+   - Reviews against quality criteria
+   - Improves and refines (up to 3 iterations)
+   - Provides quality score and feedback
+6. **Review the results**:
+   - View quality score (if Definition of Done is provided)
+   - See how many iterations were needed
+   - Read comprehensive manual test cases
+7. **Optional**: Provide feedback and regenerate:
+   - Enter specific feedback in the textarea
+   - Click "Regenerate with Feedback"
+   - Claude incorporates your feedback and generates improved version
+8. Copy final test cases to clipboard for your test plan
 
 ## Architecture
 
@@ -108,13 +132,44 @@ This application includes a curated knowledge base in the `knowledge/` folder th
   - Authentication patterns
   - Integration points
 
+- **[examples/](knowledge/examples/)** - Example PBIs and test cases (Optional):
+  - Place example PBI JSON files in `knowledge/examples/pbis/`
+  - Place corresponding test case markdown files in `knowledge/examples/test-cases/`
+  - Files must have matching names (e.g., `login.json` and `login.md`)
+  - Claude learns from these examples to match your quality and format
+  - See [examples/README.md](knowledge/examples/README.md) for instructions
+
+- **[definition-of-done/](knowledge/examples/definition-of-done/)** - Quality criteria (Optional):
+  - Place Definition of Done markdown files in this folder
+  - Defines what makes test cases "ready for use"
+  - Claude uses these for self-review and iterative improvement
+  - Enables quality scoring (1-10) of generated test cases
+  - See [definition-of-done/README.md](knowledge/examples/definition-of-done/README.md) for instructions
+
 ### How It Works
 
-When you generate test cases, Claude AI automatically receives this knowledge as context, ensuring:
-- Test cases follow GL Assessment standards
-- Domain terminology is understood correctly
-- Tests are appropriate for the technical stack
-- All required test types are included
+When you generate test cases:
+
+1. **Context Loading**: Claude receives the knowledge base, examples (if any), and Definition of Done (if any)
+
+2. **Initial Generation**: Claude creates test cases using all available context
+
+3. **Self-Review** (if Definition of Done exists):
+   - Claude reviews its own output against quality criteria
+   - Identifies issues and areas for improvement
+
+4. **Iterative Improvement** (up to 3 iterations):
+   - Claude generates improved version addressing issues
+   - Process repeats until quality standards are met or max iterations reached
+
+5. **Quality Scoring** (if Definition of Done exists):
+   - Claude provides quality score (1-10) with justification
+   - Lists strengths and areas for improvement
+
+6. **User Feedback** (optional):
+   - You can provide specific feedback
+   - Claude regenerates incorporating your feedback
+   - Process can repeat as needed
 
 **No external dependencies required** - everything is self-contained in this repository.
 

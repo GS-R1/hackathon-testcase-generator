@@ -10,6 +10,9 @@ interface AnalysisResult {
   content: string;
   htmlContent: SafeHtml;
   timestamp: Date;
+  qualityScore?: string;
+  qualityScoreHtml?: SafeHtml;
+  iterations?: number;
 }
 
 @Component({
@@ -28,6 +31,7 @@ export class AnalysisComponent {
   itemData: any = null;
 
   analysisResults: AnalysisResult[] = [];
+  userFeedback: string = '';
 
   constructor(
     private apiService: ApiService,
@@ -72,27 +76,60 @@ export class AnalysisComponent {
     }
   }
 
-  async generateTestCases() {
+  async generateTestCases(withFeedback: boolean = false) {
     if (!this.itemData) {
       this.error = 'Please fetch a PBI first';
       return;
     }
 
+    if (withFeedback && !this.userFeedback.trim()) {
+      this.error = 'Please provide feedback before regenerating';
+      return;
+    }
+
     this.loading = true;
     this.error = '';
-    this.analysisResults = [];
+
+    // Get the previous test cases if providing feedback
+    const previousTestCases = withFeedback && this.analysisResults.length > 0
+      ? this.analysisResults[this.analysisResults.length - 1].content
+      : undefined;
+
+    if (!withFeedback) {
+      this.analysisResults = [];
+      this.userFeedback = '';
+    }
 
     try {
-      const result = await this.apiService.analyzeWithClaude(this.itemData, 'testCases');
+      const result = await this.apiService.analyzeWithClaude(
+        this.itemData,
+        'testCases',
+        withFeedback ? this.userFeedback : undefined,
+        previousTestCases
+      );
 
       if (result.success) {
         const htmlContent = marked.parse(result.data);
+
+        let qualityScoreHtml: SafeHtml | undefined = undefined;
+        if (result.qualityScore) {
+          qualityScoreHtml = this.sanitizer.sanitize(1, marked.parse(result.qualityScore)) || '';
+        }
+
         this.analysisResults.push({
           type: 'testCases',
           content: result.data,
           htmlContent: this.sanitizer.sanitize(1, htmlContent) || '',
-          timestamp: new Date()
+          timestamp: new Date(),
+          qualityScore: result.qualityScore,
+          qualityScoreHtml: qualityScoreHtml,
+          iterations: result.iterations
         });
+
+        // Clear feedback after successful regeneration
+        if (withFeedback) {
+          this.userFeedback = '';
+        }
       } else {
         this.error = `Failed to generate test cases: ${result.error}`;
       }

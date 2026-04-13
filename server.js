@@ -71,7 +71,7 @@ async function invokeClaudeOnBedrock(prompt) {
 
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
-    max_tokens: 4096,
+    max_tokens: 16384, // Increased from 4096 to allow for comprehensive test plans
     messages: [
       {
         role: 'user',
@@ -151,40 +151,64 @@ app.get('/api/workitem/:id', async (req, res) => {
 // Analyze with Claude
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { data, analysisType } = req.body;
+    const { data, analysisType, userFeedback, previousTestCases } = req.body;
 
     console.log('');
     console.log('============================================');
     console.log(`  Starting Analysis: ${analysisType}`);
     console.log('============================================');
 
-    let prompt = '';
-    switch (analysisType) {
-      case 'testCases':
-        prompt = buildTestCasesPrompt(data);
-        break;
-      case 'impactAnalysis':
-        prompt = buildImpactAnalysisPrompt(data);
-        break;
-      case 'documentation':
-        prompt = buildDocumentationPrompt(data);
-        break;
-      default:
-        throw new Error(`Unknown analysis type: ${analysisType}`);
+    if (analysisType === 'testCases') {
+      // If user provided feedback, use direct improvement flow
+      if (userFeedback && previousTestCases) {
+        console.log('🔄 User Feedback Mode - Improving existing test cases...');
+        console.log(`   Feedback: "${userFeedback.substring(0, 100)}${userFeedback.length > 100 ? '...' : ''}"`);
+        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback);
+
+        res.json({
+          success: true,
+          data: result.testCases,
+          qualityScore: result.qualityScore,
+          iterations: 1 // Single improvement iteration
+        });
+      } else {
+        // Use iterative quality generation for initial test cases
+        const result = await generateTestCasesWithQuality(data);
+
+        res.json({
+          success: true,
+          data: result.testCases,
+          qualityScore: result.qualityScore,
+          iterations: result.iterations
+        });
+      }
+    } else {
+      // Other analysis types use simple generation
+      let prompt = '';
+      switch (analysisType) {
+        case 'impactAnalysis':
+          prompt = buildImpactAnalysisPrompt(data);
+          break;
+        case 'documentation':
+          prompt = buildDocumentationPrompt(data);
+          break;
+        default:
+          throw new Error(`Unknown analysis type: ${analysisType}`);
+      }
+
+      console.log(`🤖 Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
+
+      const result = await invokeClaudeOnBedrock(prompt);
+
+      console.log('✓ Claude response received from Bedrock');
+      console.log('============================================');
+      console.log('');
+
+      res.json({
+        success: true,
+        data: result
+      });
     }
-
-    console.log(`🤖 Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
-
-    const result = await invokeClaudeOnBedrock(prompt);
-
-    console.log('✓ Claude response received from Bedrock');
-    console.log('============================================');
-    console.log('');
-
-    res.json({
-      success: true,
-      data: result
-    });
   } catch (error) {
     console.error('Error in Claude analysis:', error);
     console.error('Error stack:', error.stack);
@@ -280,6 +304,71 @@ function loadExamples() {
     console.log('');
     examplesCache = [];
     return examplesCache;
+  }
+}
+
+// Definition of Done Cache
+let definitionOfDoneCache = null;
+
+function loadDefinitionOfDone() {
+  if (definitionOfDoneCache !== null) {
+    return definitionOfDoneCache; // Return cached (even if empty array)
+  }
+
+  const definitions = [];
+  const dodPath = path.join(__dirname, 'knowledge/examples/definition-of-done');
+
+  try {
+    // Check if directory exists
+    if (!fs.existsSync(dodPath)) {
+      console.log('ℹ Definition of Done folder not found - skipping quality criteria');
+      definitionOfDoneCache = [];
+      return definitionOfDoneCache;
+    }
+
+    // Read all markdown files
+    const dodFiles = fs.readdirSync(dodPath).filter(f => f.endsWith('.md') && !f.includes('README'));
+
+    if (dodFiles.length === 0) {
+      console.log('ℹ No Definition of Done files found - skipping quality criteria');
+      definitionOfDoneCache = [];
+      return definitionOfDoneCache;
+    }
+
+    console.log('');
+    console.log('📋 Loading Definition of Done...');
+    console.log('--------------------------------------------');
+
+    dodFiles.forEach(file => {
+      try {
+        const content = fs.readFileSync(path.join(dodPath, file), 'utf-8');
+        definitions.push({
+          name: file,
+          content: content
+        });
+        console.log(`✓ Loaded: ${file}`);
+        console.log(`  → ${(content.length / 1024).toFixed(1)} KB - Quality criteria for self-review`);
+      } catch (error) {
+        console.log(`✗ Error loading ${file}:`, error.message);
+      }
+    });
+
+    console.log('--------------------------------------------');
+    if (definitions.length > 0) {
+      console.log(`✓ Loaded ${definitions.length} Definition of Done file(s)`);
+      console.log('  → Claude will use these for self-review and quality scoring');
+    } else {
+      console.log('ℹ No Definition of Done files loaded');
+    }
+    console.log('');
+
+    definitionOfDoneCache = definitions;
+    return definitionOfDoneCache;
+  } catch (error) {
+    console.error('✗ Error loading Definition of Done:', error.message);
+    console.log('');
+    definitionOfDoneCache = [];
+    return definitionOfDoneCache;
   }
 }
 
@@ -534,6 +623,330 @@ Please create:
 4. API documentation changes (if applicable)
 
 Use clear, professional language suitable for different audiences.`;
+}
+
+// Self-Review and Quality Functions
+function buildSelfReviewPrompt(testCases, definitionOfDone) {
+  const dodContext = definitionOfDone.length > 0 ? `
+# Definition of Done Criteria
+
+Review the test cases against these quality standards:
+
+${definitionOfDone.map(dod => `
+## ${dod.name}
+${dod.content}
+`).join('\n')}
+` : '';
+
+  return `${dodContext}
+
+# Test Cases to Review
+
+${testCases}
+
+---
+
+# Your Task
+
+Review the test cases above and evaluate them against ${definitionOfDone.length > 0 ? 'the Definition of Done criteria' : 'general quality standards'}.
+
+Provide a structured review in this format:
+
+## Overall Assessment
+[Brief summary of quality level]
+
+## Strengths
+- [What's good about these test cases]
+
+## Issues Found
+1. **[Issue Category]**: [Specific problem and location]
+2. **[Issue Category]**: [Specific problem and location]
+[Continue for all issues]
+
+## Recommended Improvements
+1. [Specific actionable improvement]
+2. [Specific actionable improvement]
+[Continue for all recommendations]
+
+## Ready for Use?
+[YES or NO] - If NO, explain what critical issues must be addressed.
+
+Be specific about test case IDs and exact issues. Focus on actionable feedback.`;
+}
+
+function buildImprovedTestCasesPrompt(originalTestCases, reviewFeedback, pbiData, knowledgeContext, definitionOfDone) {
+  return `${knowledgeContext}
+
+## PBI Details
+
+${JSON.stringify(pbiData, null, 2)}
+
+## Previous Test Cases
+
+${originalTestCases}
+
+## Review Feedback
+
+${reviewFeedback}
+
+---
+
+# Your Task
+
+Generate IMPROVED test cases that address all the issues identified in the review feedback.
+
+${definitionOfDone.length > 0 ? `Ensure the improved test cases fully comply with the Definition of Done criteria provided earlier.` : ''}
+
+Maintain the same structure and categories, but fix all identified issues. The improved version should be ready for immediate use by manual testers.
+
+**REMINDER: Test Case #1 (TC-001) MUST be the Happy Path.**
+
+Generate the complete improved test plan now.`;
+}
+
+function buildQualityScoringPrompt(testCases, definitionOfDone) {
+  const dodContext = definitionOfDone.length > 0 ? `using the Definition of Done criteria provided earlier` : `using general quality standards for manual test cases`;
+
+  return `# Test Cases to Score
+
+${testCases}
+
+---
+
+# Your Task
+
+Evaluate the quality of these test cases ${dodContext}.
+
+Provide your assessment in this EXACT format:
+
+## Quality Score: [X]/10
+
+## Justification
+[2-3 sentences explaining the score]
+
+## Strengths
+- [Key strength 1]
+- [Key strength 2]
+- [Key strength 3]
+
+## Areas for Improvement (if any)
+- [Improvement area 1]
+- [Improvement area 2]
+
+Keep your response concise and focused.`;
+}
+
+async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback) {
+  const knowledge = loadKnowledgeBase();
+  const definitionOfDone = loadDefinitionOfDone();
+
+  console.log('');
+  console.log('--------------------------------------------');
+
+  // Build knowledge context
+  let knowledgeContext = '';
+  if (knowledge) {
+    knowledgeContext = `
+# CONTEXT: GL Assessment Testing Standards and Platform Knowledge
+
+${knowledge.testingStandards}
+
+---
+
+${knowledge.glossary}
+
+---
+
+${knowledge.platformOverview}
+
+---
+`;
+  }
+
+  // Build improvement prompt
+  const improvementPrompt = `${knowledgeContext}
+
+## PBI Details
+
+${JSON.stringify(pbiData, null, 2)}
+
+---
+
+## Previous Test Cases
+
+${previousTestCases}
+
+---
+
+## User Feedback
+
+The user has reviewed the test cases above and provided the following feedback:
+
+"${userFeedback}"
+
+---
+
+# Your Task
+
+Generate IMPROVED test cases that address the user's feedback while maintaining all the good aspects of the previous version.
+
+**Instructions:**
+- Keep the same structure and format
+- Address the specific feedback provided
+- Maintain quality and completeness
+- **IMPORTANT: Test Case #1 (TC-001) MUST remain the Happy Path**
+- Only make changes related to the user's feedback
+- If the user asks for specific changes (e.g., "only give me one test"), follow that instruction exactly
+
+Generate the complete improved test plan now.`;
+
+  console.log('🤖 Calling Claude to improve test cases with user feedback...');
+  const improvedTestCases = await invokeClaudeOnBedrock(improvementPrompt);
+  console.log('✓ Improved test cases generated');
+
+  // Generate quality score if DoD exists
+  let qualityScore = null;
+  if (definitionOfDone.length > 0) {
+    console.log('📊 Generating quality score...');
+    const scoringPrompt = buildQualityScoringPrompt(improvedTestCases, definitionOfDone);
+    qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
+    console.log('✓ Quality score generated');
+  }
+
+  console.log('============================================');
+  console.log('');
+
+  return {
+    testCases: improvedTestCases,
+    qualityScore: qualityScore
+  };
+}
+
+async function generateTestCasesWithQuality(pbiData) {
+  const MAX_ITERATIONS = 3;
+  const knowledge = loadKnowledgeBase();
+  const examples = loadExamples();
+  const definitionOfDone = loadDefinitionOfDone();
+
+  console.log('');
+  console.log('🔄 Starting Iterative Test Generation with Quality Review...');
+  console.log('--------------------------------------------');
+
+  // Build knowledge context once
+  let knowledgeContext = '';
+  if (knowledge) {
+    knowledgeContext = `
+# CONTEXT: GL Assessment Testing Standards and Platform Knowledge
+
+You are generating test cases for GL Assessment's Testwise platform. Use the following knowledge to inform your test case generation:
+
+${knowledge.testingStandards}
+
+---
+
+${knowledge.glossary}
+
+---
+
+${knowledge.platformOverview}
+
+---
+
+${examples.length > 0 ? `
+# EXAMPLES: Learn from High-Quality Test Cases
+
+Below are examples of well-written PBIs and their corresponding test cases. Use these as references for format, structure, quality, and level of detail when generating test cases.
+
+${examples.map((example, index) => `
+## Example ${index + 1}: ${example.name}
+
+### Example PBI:
+${example.pbi}
+
+### Example Test Cases:
+${example.testCases}
+
+---
+`).join('\n')}
+
+` : ''}`;
+  }
+
+  let currentTestCases = '';
+  let iteration = 0;
+  let isReadyForUse = false;
+
+  // Iteration loop
+  while (iteration < MAX_ITERATIONS && !isReadyForUse) {
+    iteration++;
+    console.log(`\n📝 Iteration ${iteration}/${MAX_ITERATIONS}`);
+
+    if (iteration === 1) {
+      // First generation
+      console.log('  → Generating initial test cases...');
+      const initialPrompt = buildTestCasesPrompt(pbiData);
+      currentTestCases = await invokeClaudeOnBedrock(initialPrompt);
+      console.log('  ✓ Initial test cases generated');
+    } else {
+      // Improvement iteration
+      console.log('  → Generating improved test cases based on review...');
+      const improvementPrompt = buildImprovedTestCasesPrompt(
+        currentTestCases,
+        lastReview,
+        pbiData,
+        knowledgeContext,
+        definitionOfDone
+      );
+      currentTestCases = await invokeClaudeOnBedrock(improvementPrompt);
+      console.log('  ✓ Improved test cases generated');
+    }
+
+    // Only do self-review if we have DoD and we're not on the last iteration
+    if (definitionOfDone.length > 0 && iteration < MAX_ITERATIONS) {
+      console.log('  → Performing self-review against Definition of Done...');
+      const reviewPrompt = buildSelfReviewPrompt(currentTestCases, definitionOfDone);
+      const lastReview = await invokeClaudeOnBedrock(reviewPrompt);
+      console.log('  ✓ Self-review complete');
+
+      // Check if ready
+      isReadyForUse = lastReview.toLowerCase().includes('ready for use?\nyes') ||
+                      lastReview.toLowerCase().includes('ready for use? yes');
+
+      if (isReadyForUse) {
+        console.log('  ✅ Test cases meet quality standards!');
+      } else {
+        console.log('  ⚠ Issues found - will iterate');
+      }
+    } else {
+      // No DoD or last iteration - accept the output
+      isReadyForUse = true;
+      if (definitionOfDone.length === 0) {
+        console.log('  ℹ No Definition of Done - skipping self-review');
+      }
+    }
+  }
+
+  console.log(`\n✓ Test generation complete after ${iteration} iteration(s)`);
+
+  // Generate quality score
+  let qualityScore = null;
+  if (definitionOfDone.length > 0) {
+    console.log('📊 Generating quality score...');
+    const scoringPrompt = buildQualityScoringPrompt(currentTestCases, definitionOfDone);
+    qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
+    console.log('✓ Quality score generated');
+  } else {
+    console.log('ℹ No Definition of Done - skipping quality scoring');
+  }
+
+  console.log('============================================');
+  console.log('');
+
+  return {
+    testCases: currentTestCases,
+    qualityScore: qualityScore,
+    iterations: iteration
+  };
 }
 
 // Serve Angular app
