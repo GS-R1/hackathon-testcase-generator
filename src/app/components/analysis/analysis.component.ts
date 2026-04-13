@@ -20,26 +20,12 @@ interface AnalysisResult {
   styleUrl: './analysis.component.scss'
 })
 export class AnalysisComponent {
-  itemType: 'pbi' | 'pr' = 'pbi';
   itemId: string = '';
   project: string = '';
-  repositoryId: string = '';
 
   loading: boolean = false;
   error: string = '';
   itemData: any = null;
-
-  selectedAnalysisTypes: {
-    testCases: boolean;
-    codeReview: boolean;
-    impactAnalysis: boolean;
-    documentation: boolean;
-  } = {
-    testCases: true,
-    codeReview: false,
-    impactAnalysis: false,
-    documentation: false
-  };
 
   analysisResults: AnalysisResult[] = [];
 
@@ -56,9 +42,6 @@ export class AnalysisComponent {
       if (settings.defaultProject) {
         this.project = settings.defaultProject;
       }
-      if (settings.defaultRepository) {
-        this.repositoryId = settings.defaultRepository;
-      }
     } catch (error: any) {
       console.error('Failed to load settings:', error);
     }
@@ -66,7 +49,7 @@ export class AnalysisComponent {
 
   async fetchItem() {
     if (!this.itemId || !this.project) {
-      this.error = 'Please enter an item ID and project';
+      this.error = 'Please enter a PBI ID and project';
       return;
     }
 
@@ -75,22 +58,12 @@ export class AnalysisComponent {
     this.itemData = null;
 
     try {
-      let result;
-      if (this.itemType === 'pbi') {
-        result = await this.apiService.getWorkItem(parseInt(this.itemId), this.project);
-      } else {
-        if (!this.repositoryId) {
-          this.error = 'Repository ID is required for PRs';
-          this.loading = false;
-          return;
-        }
-        result = await this.apiService.getPullRequest(parseInt(this.itemId), this.repositoryId, this.project);
-      }
+      const result = await this.apiService.getWorkItem(parseInt(this.itemId), this.project);
 
       if (result.success) {
         this.itemData = result.data;
       } else {
-        this.error = result.error || 'Failed to fetch item';
+        this.error = result.error || 'Failed to fetch PBI';
       }
     } catch (error: any) {
       this.error = error.message || 'An error occurred';
@@ -99,18 +72,9 @@ export class AnalysisComponent {
     }
   }
 
-  async analyzeWithClaude() {
+  async generateTestCases() {
     if (!this.itemData) {
-      this.error = 'Please fetch an item first';
-      return;
-    }
-
-    const selectedTypes = Object.entries(this.selectedAnalysisTypes)
-      .filter(([_, selected]) => selected)
-      .map(([type]) => type);
-
-    if (selectedTypes.length === 0) {
-      this.error = 'Please select at least one analysis type';
+      this.error = 'Please fetch a PBI first';
       return;
     }
 
@@ -118,37 +82,25 @@ export class AnalysisComponent {
     this.error = '';
     this.analysisResults = [];
 
-    for (const analysisType of selectedTypes) {
-      try {
-        const result = await this.apiService.analyzeWithClaude(this.itemData, analysisType as any);
+    try {
+      const result = await this.apiService.analyzeWithClaude(this.itemData, 'testCases');
 
-        if (result.success) {
-          const htmlContent = marked.parse(result.data);
-          this.analysisResults.push({
-            type: analysisType,
-            content: result.data,
-            htmlContent: this.sanitizer.sanitize(1, htmlContent) || '',
-            timestamp: new Date()
-          });
-        } else {
-          this.error += `Failed to analyze ${analysisType}: ${result.error}\n`;
-        }
-      } catch (error: any) {
-        this.error += `Error analyzing ${analysisType}: ${error.message}\n`;
+      if (result.success) {
+        const htmlContent = marked.parse(result.data);
+        this.analysisResults.push({
+          type: 'testCases',
+          content: result.data,
+          htmlContent: this.sanitizer.sanitize(1, htmlContent) || '',
+          timestamp: new Date()
+        });
+      } else {
+        this.error = `Failed to generate test cases: ${result.error}`;
       }
+    } catch (error: any) {
+      this.error = `Error generating test cases: ${error.message}`;
     }
 
     this.loading = false;
-  }
-
-  getAnalysisTypeLabel(type: string): string {
-    const labels: Record<string, string> = {
-      testCases: 'Test Cases',
-      codeReview: 'Code Review',
-      impactAnalysis: 'Impact Analysis',
-      documentation: 'Documentation'
-    };
-    return labels[type] || type;
   }
 
   copyToClipboard(content: string) {

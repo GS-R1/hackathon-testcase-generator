@@ -1,21 +1,13 @@
 <div class="analysis-container">
   <div class="header">
-    <h1>PBI/PR Analyzer</h1>
-    <p class="subtitle">Analyze Product Backlog Items and Pull Requests with Claude AI</p>
+    <h1>PBI Manual Test Case Generator</h1>
+    <p class="subtitle">Generate manual test cases for Product Backlog Items with Claude AI</p>
   </div>
 
   <div class="input-section">
     <div class="form-group">
-      <label>Item Type:</label>
-      <select [(ngModel)]="itemType" class="form-control">
-        <option value="pbi">Product Backlog Item (PBI)</option>
-        <option value="pr">Pull Request (PR)</option>
-      </select>
-    </div>
-
-    <div class="form-group">
-      <label>{{ itemType === 'pbi' ? 'PBI ID' : 'PR ID' }}:</label>
-      <input type="text" [(ngModel)]="itemId" class="form-control" placeholder="Enter ID...">
+      <label>PBI ID:</label>
+      <input type="text" [(ngModel)]="itemId" class="form-control" placeholder="Enter PBI ID (e.g., 95962)">
     </div>
 
     <div class="form-group">
@@ -23,13 +15,8 @@
       <input type="text" [(ngModel)]="project" class="form-control" placeholder="e.g., Testwise">
     </div>
 
-    <div class="form-group" *ngIf="itemType === 'pr'">
-      <label>Repository ID:</label>
-      <input type="text" [(ngModel)]="repositoryId" class="form-control" placeholder="Repository GUID or name">
-    </div>
-
     <button class="btn btn-primary" (click)="fetchItem()" [disabled]="loading">
-      {{ loading ? 'Loading...' : 'Fetch Item' }}
+      {{ loading ? 'Loading...' : 'Fetch PBI' }}
     </button>
   </div>
 
@@ -38,68 +25,33 @@
   </div>
 
   <div class="item-details" *ngIf="itemData">
-    <h2>Item Details</h2>
+    <h2>PBI Details</h2>
     <div class="details-card">
-      <div *ngIf="itemType === 'pbi'">
-        <p><strong>ID:</strong> {{ itemData.id }}</p>
-        <p><strong>Title:</strong> {{ itemData.fields?.['System.Title'] }}</p>
-        <p><strong>Type:</strong> {{ itemData.fields?.['System.WorkItemType'] }}</p>
-        <p><strong>State:</strong> {{ itemData.fields?.['System.State'] }}</p>
-        <p><strong>Assigned To:</strong> {{ itemData.fields?.['System.AssignedTo']?.displayName || 'Unassigned' }}</p>
-        <p><strong>Description:</strong></p>
-        <div [innerHTML]="itemData.fields?.['System.Description']" class="description"></div>
-      </div>
-
-      <div *ngIf="itemType === 'pr'">
-        <p><strong>ID:</strong> {{ itemData.pullRequest?.pullRequestId }}</p>
-        <p><strong>Title:</strong> {{ itemData.pullRequest?.title }}</p>
-        <p><strong>Status:</strong> {{ itemData.pullRequest?.status }}</p>
-        <p><strong>Created By:</strong> {{ itemData.pullRequest?.createdBy?.displayName }}</p>
-        <p><strong>Source:</strong> {{ itemData.pullRequest?.sourceRefName }}</p>
-        <p><strong>Target:</strong> {{ itemData.pullRequest?.targetRefName }}</p>
-        <p><strong>Commits:</strong> {{ itemData.commits?.length || 0 }}</p>
-        <p><strong>Description:</strong></p>
-        <pre class="description">{{ itemData.pullRequest?.description }}</pre>
-      </div>
+      <p><strong>ID:</strong> {{ itemData.id }}</p>
+      <p><strong>Title:</strong> {{ itemData.fields?.['System.Title'] }}</p>
+      <p><strong>Type:</strong> {{ itemData.fields?.['System.WorkItemType'] }}</p>
+      <p><strong>State:</strong> {{ itemData.fields?.['System.State'] }}</p>
+      <p><strong>Assigned To:</strong> {{ itemData.fields?.['System.AssignedTo']?.displayName || 'Unassigned' }}</p>
+      <p><strong>Description:</strong></p>
+      <div [innerHTML]="itemData.fields?.['System.Description']" class="description"></div>
     </div>
 
     <div class="analysis-options">
-      <h3>Select Analysis Types:</h3>
-      <div class="checkbox-group">
-        <label>
-          <input type="checkbox" [(ngModel)]="selectedAnalysisTypes.testCases">
-          Test Cases
-        </label>
-        <label>
-          <input type="checkbox" [(ngModel)]="selectedAnalysisTypes.codeReview" [disabled]="itemType === 'pbi'">
-          Code Review (PR only)
-        </label>
-        <label>
-          <input type="checkbox" [(ngModel)]="selectedAnalysisTypes.impactAnalysis">
-          Impact Analysis
-        </label>
-        <label>
-          <input type="checkbox" [(ngModel)]="selectedAnalysisTypes.documentation">
-          Documentation
-        </label>
-      </div>
-
-      <button class="btn btn-success" (click)="analyzeWithClaude()" [disabled]="loading">
-        {{ loading ? 'Analyzing...' : 'Analyze with Claude' }}
+      <button class="btn btn-success" (click)="generateTestCases()" [disabled]="loading">
+        {{ loading ? 'Generating...' : 'Generate Manual Test Cases' }}
       </button>
     </div>
   </div>
 
   <div class="results-section" *ngIf="analysisResults.length > 0">
     <div class="results-header">
-      <h2>Analysis Results</h2>
+      <h2>Manual Test Cases</h2>
       <button class="btn btn-secondary" (click)="clearResults()">Clear Results</button>
     </div>
 
     <div class="result-card" *ngFor="let result of analysisResults">
       <div class="result-header">
-        <h3>{{ getAnalysisTypeLabel(result.type) }}</h3>
-        <button class="btn btn-small" (click)="copyToClipboard(result.content)">Copy</button>
+        <button class="btn btn-small" (click)="copyToClipboard(result.content)">Copy to Clipboard</button>
       </div>
       <div class="result-content markdown-content" [innerHTML]="result.htmlContent">
       </div>

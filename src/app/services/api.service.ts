@@ -17,15 +17,7 @@ export class ApiService {
     );
   }
 
-  async getPullRequest(prId: number, repositoryId: string, project: string) {
-    return firstValueFrom(
-      this.http.get<any>(`${this.baseUrl}/pullrequest/${prId}`, {
-        params: { project, repositoryId }
-      })
-    );
-  }
-
-  async analyzeWithClaude(data: any, analysisType: 'testCases' | 'codeReview' | 'impactAnalysis' | 'documentation') {
+  async analyzeWithClaude(data: any, analysisType: 'testCases' | 'impactAnalysis' | 'documentation') {
     return firstValueFrom(
       this.http.post<any>(`${this.baseUrl}/analyze`, {
         data,

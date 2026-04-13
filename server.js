@@ -148,53 +148,20 @@ app.get('/api/workitem/:id', async (req, res) => {
   }
 });
 
-// Get Pull Request
-app.get('/api/pullrequest/:id', async (req, res) => {
-  try {
-    const prId = parseInt(req.params.id);
-    const project = req.query.project || DEFAULT_PROJECT;
-    const repositoryId = req.query.repositoryId;
-
-    if (!repositoryId) {
-      return res.status(400).json({ success: false, error: 'Repository ID is required' });
-    }
-
-    const token = getAzureToken();
-    const authHandler = azdev.getBearerHandler(token);
-    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
-    const gitApi = await connection.getGitApi();
-
-    const pr = await gitApi.getPullRequest(repositoryId, prId, project);
-    const commits = await gitApi.getPullRequestCommits(repositoryId, prId, project);
-    const iterations = await gitApi.getPullRequestIterations(repositoryId, prId, project);
-
-    res.json({
-      success: true,
-      data: {
-        pullRequest: pr,
-        commits: commits,
-        iterations: iterations
-      }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Analyze with Claude
 app.post('/api/analyze', async (req, res) => {
   try {
     const { data, analysisType } = req.body;
 
-    console.log(`Starting Claude analysis via Bedrock: ${analysisType}`);
+    console.log('');
+    console.log('============================================');
+    console.log(`  Starting Analysis: ${analysisType}`);
+    console.log('============================================');
 
     let prompt = '';
     switch (analysisType) {
       case 'testCases':
         prompt = buildTestCasesPrompt(data);
-        break;
-      case 'codeReview':
-        prompt = buildCodeReviewPrompt(data);
         break;
       case 'impactAnalysis':
         prompt = buildImpactAnalysisPrompt(data);
@@ -206,11 +173,13 @@ app.post('/api/analyze', async (req, res) => {
         throw new Error(`Unknown analysis type: ${analysisType}`);
     }
 
-    console.log(`Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
+    console.log(`🤖 Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
 
     const result = await invokeClaudeOnBedrock(prompt);
 
-    console.log('Claude response received from Bedrock');
+    console.log('✓ Claude response received from Bedrock');
+    console.log('============================================');
+    console.log('');
 
     res.json({
       success: true,
@@ -223,39 +192,202 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-// Prompt builders
-function buildTestCasesPrompt(data) {
-  return `Analyze the following PBI/PR and generate comprehensive test cases:
+// Knowledge Base Cache
+let knowledgeCache = null;
 
-${JSON.stringify(data, null, 2)}
+function loadKnowledgeBase() {
+  if (knowledgeCache) {
+    console.log('📚 Using cached knowledge base');
+    return knowledgeCache;
+  }
 
-Please provide:
-1. Unit test scenarios
-2. Integration test scenarios
-3. Edge cases to consider
-4. Negative test cases
-5. Performance test considerations
+  console.log('');
+  console.log('📚 Loading Knowledge Base...');
+  console.log('--------------------------------------------');
 
-Format the response as a structured test plan.`;
+  try {
+    const testingStandards = fs.readFileSync(path.join(__dirname, 'knowledge/testing-standards.md'), 'utf-8');
+    console.log('✓ Loaded: testing-standards.md');
+    console.log(`  → ${(testingStandards.length / 1024).toFixed(1)} KB - GL Assessment testing standards (DoR/DoD, test types)`);
+
+    const glossary = fs.readFileSync(path.join(__dirname, 'knowledge/glossary.md'), 'utf-8');
+    console.log('✓ Loaded: glossary.md');
+    console.log(`  → ${(glossary.length / 1024).toFixed(1)} KB - Domain terminology (CAT4, NGRT, SAS, etc.)`);
+
+    const platformOverview = fs.readFileSync(path.join(__dirname, 'knowledge/platform-overview.md'), 'utf-8');
+    console.log('✓ Loaded: platform-overview.md');
+    console.log(`  → ${(platformOverview.length / 1024).toFixed(1)} KB - Platform architecture & tech stack`);
+
+    knowledgeCache = {
+      testingStandards,
+      glossary,
+      platformOverview
+    };
+
+    const totalSize = (testingStandards.length + glossary.length + platformOverview.length) / 1024;
+    console.log('--------------------------------------------');
+    console.log(`✓ Knowledge base loaded successfully (${totalSize.toFixed(1)} KB total)`);
+    console.log('');
+
+    return knowledgeCache;
+  } catch (error) {
+    console.error('✗ Error loading knowledge base:', error);
+    console.log('');
+    return null;
+  }
 }
 
-function buildCodeReviewPrompt(data) {
-  return `Review the following code changes from a pull request:
+// Prompt builders
+function buildTestCasesPrompt(data) {
+  console.log('');
+  console.log('🧠 Building test case generation prompt...');
+  console.log('--------------------------------------------');
+
+  const knowledge = loadKnowledgeBase();
+
+  let knowledgeContext = '';
+  if (knowledge) {
+    console.log('📖 Applying knowledge base context:');
+    console.log('  ✓ Testing standards (DoR/DoD, acceptance criteria format)');
+    console.log('  ✓ Domain glossary (product names, technical terms)');
+    console.log('  ✓ Platform overview (architecture, tech stack, products)');
+    console.log('');
+    console.log('🎯 Test Generation Strategy:');
+    console.log('  → Test Case #1: Happy Path (mandatory first test)');
+    console.log('  → Followed by: Edge cases, negative tests, accessibility, etc.');
+    console.log('--------------------------------------------');
+    console.log('✓ Prompt ready with full GL Assessment context');
+    console.log('');
+
+    knowledgeContext = `
+# CONTEXT: GL Assessment Testing Standards and Platform Knowledge
+
+You are generating test cases for GL Assessment's Testwise platform. Use the following knowledge to inform your test case generation:
+
+${knowledge.testingStandards}
+
+---
+
+${knowledge.glossary}
+
+---
+
+${knowledge.platformOverview}
+
+---
+
+# YOUR TASK
+
+Now, using the standards and context above, analyze the following Product Backlog Item (PBI) and generate comprehensive test cases.
+`;
+  } else {
+    console.log('⚠ Warning: Knowledge base not loaded - generating without GL context');
+    console.log('--------------------------------------------');
+    console.log('');
+  }
+
+  return `${knowledgeContext}
+
+## PBI Details
 
 ${JSON.stringify(data, null, 2)}
 
-Please provide:
-1. Potential bugs or issues
-2. Code quality concerns
-3. Best practice violations
-4. Security considerations
-5. Suggestions for improvement
+## Requirements
 
-Be specific and reference line numbers or code snippets where applicable.`;
+Generate a comprehensive **MANUAL TEST PLAN** that includes:
+
+**IMPORTANT: The very first test case (Test Case #1) MUST be the Happy Path scenario - the ideal, successful user journey with valid inputs and expected successful outcomes.**
+
+1. **Happy Path Test (TEST CASE #1 - MANDATORY)**
+   - This MUST be the first test case in your test plan
+   - Cover the primary, successful user journey
+   - Use valid data and expected inputs
+   - Verify all steps complete successfully
+   - Format in Given/When/Then structure
+   - Include clear step-by-step instructions
+   - Specify expected successful results
+
+2. **Additional Acceptance Criteria Tests** (Given/When/Then format)
+   - Cover all remaining acceptance criteria from the PBI
+   - Include variations and alternative paths
+   - Provide clear step-by-step instructions
+   - Specify expected results for each test
+
+3. **Functional Test Scenarios**
+   - Core functionality tests
+   - User workflows and journeys
+   - UI interactions and navigation
+   - Data input and validation
+   - Form submissions
+   - Search and filtering functionality
+
+4. **Edge Cases and Boundary Tests**
+   - Boundary values (minimum/maximum)
+   - Empty/null data scenarios
+   - Special characters and unusual inputs
+   - Large data sets
+   - Concurrent user scenarios (if applicable)
+
+5. **Negative Test Cases**
+   - Invalid inputs
+   - Incorrect data formats
+   - Unauthorized access attempts
+   - Error message validation
+   - System behavior under failure conditions
+
+6. **User Acceptance Testing (UAT) Scenarios**
+   - Real-world user scenarios
+   - Business process validation
+   - End-to-end user journeys
+
+7. **Cross-Browser Testing**
+   - Chrome (primary browser)
+   - Edge, Firefox, Safari (sanity checks)
+   - Responsive design on different screen sizes
+   - Mobile device testing (if applicable)
+
+8. **Accessibility Testing** (Manual checks)
+   - Keyboard navigation (Tab, Enter, Escape)
+   - Screen reader compatibility testing
+   - Color contrast verification
+   - Focus indicators visibility
+   - Alt text for images
+
+9. **Performance and Usability**
+   - Page load time observations
+   - Response time for actions
+   - UI responsiveness
+   - Error handling and user feedback
+
+10. **Security Testing** (Manual verification)
+    - Authentication and authorization checks
+    - Data validation
+    - Session management
+    - Sensitive data handling
+
+11. **Exploratory Testing Suggestions**
+    - Areas to explore freely
+    - Potential risk areas
+    - Integration points to verify
+
+## Test Case Format
+
+For each test case, provide:
+- **Test Case ID**: Unique identifier (e.g., TC-001, TC-002, etc.)
+- **Test Scenario**: Brief description
+- **Preconditions**: What must be set up or true before testing
+- **Test Steps**: Numbered, clear, step-by-step instructions
+- **Test Data**: Specific data values to use
+- **Expected Result**: What should happen
+- **Notes**: Any additional context or considerations
+
+**REMINDER: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.**
+
+Format the response as a structured, detailed manual test plan organized by category. Use markdown formatting with clear headings, numbered steps, and bullet points. Make it easy for a manual tester to execute.`;
 }
 
 function buildImpactAnalysisPrompt(data) {
-  return `Analyze the impact of the following changes:
+  return `Analyze the impact of the following Product Backlog Item (PBI):
 
 ${JSON.stringify(data, null, 2)}
 
@@ -271,7 +403,7 @@ Provide a structured impact analysis.`;
 }
 
 function buildDocumentationPrompt(data) {
-  return `Generate documentation for the following PBI/PR:
+  return `Generate documentation for the following Product Backlog Item (PBI):
 
 ${JSON.stringify(data, null, 2)}
 
@@ -319,10 +451,34 @@ process.on('unhandledRejection', (error) => {
 const server = app.listen(PORT, () => {
   console.log('');
   console.log('============================================');
-  console.log('  PBI/PR Analyzer Server');
+  console.log('  PBI Manual Test Case Generator Server');
   console.log('============================================');
   console.log('');
   console.log(`  Server running at: http://localhost:${PORT}`);
+  console.log('');
+
+  // Check knowledge base availability
+  const knowledgeFiles = [
+    'knowledge/testing-standards.md',
+    'knowledge/glossary.md',
+    'knowledge/platform-overview.md'
+  ];
+
+  let allFilesExist = true;
+  knowledgeFiles.forEach(file => {
+    if (!fs.existsSync(path.join(__dirname, file))) {
+      allFilesExist = false;
+    }
+  });
+
+  if (allFilesExist) {
+    console.log('  📚 Knowledge Base: Ready');
+    console.log('     • Testing Standards');
+    console.log('     • Domain Glossary');
+    console.log('     • Platform Overview');
+  } else {
+    console.log('  ⚠  Knowledge Base: Missing files!');
+  }
   console.log('');
   console.log('  Opening browser...');
   console.log('============================================');

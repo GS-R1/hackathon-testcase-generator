@@ -1,6 +1,6 @@
-# PBI/PR Analyzer
+# PBI Manual Test Case Generator
 
-A web application for analyzing Product Backlog Items (PBIs) and Pull Requests (PRs) from Azure DevOps using Claude AI.
+A web application for generating manual test cases for Product Backlog Items (PBIs) from Azure DevOps using Claude AI.
 
 ## Quick Start
 
@@ -25,38 +25,31 @@ The application will automatically:
 - Start the server on port 3000
 - Open your browser
 
-**That's it!** Start analyzing PBIs and PRs.
+**That's it!** Start generating test cases for PBIs.
 
 ## Features
 
-- **Fetch PBIs and PRs** from Azure DevOps automatically
-- **AI-Powered Analysis** using Claude Opus 4.6:
-  - Generate comprehensive test cases
-  - Perform detailed code reviews
-  - Conduct impact analysis
-  - Create documentation
+- **Fetch PBIs** from Azure DevOps automatically
+- **AI-Powered Manual Test Case Generation** using Claude Opus 4.6:
+  - Generate comprehensive manual test cases following GL Assessment standards
+  - Context-aware using embedded knowledge base
+  - Includes functional, UAT, accessibility, and security test scenarios
+  - Step-by-step instructions ready for manual testers
+- **Embedded Knowledge Base** - No external dependencies required:
+  - GL Assessment testing standards (DoR/DoD)
+  - Platform architecture and tech stack
+  - Domain glossary (CAT4, NGRT, SAS, etc.)
 - **Azure CLI Authentication** - Uses your existing `az login` session
 - **Simple Web App** - Runs in your browser, no desktop app issues
 
 ## How to Use
 
-### Analyzing a PBI
-
-1. Select **Product Backlog Item (PBI)**
-2. Enter PBI ID (e.g., `95962`) and Project (e.g., `Testwise`)
-3. Click **Fetch Item**
-4. Select analysis types (Test Cases, Impact Analysis, Documentation)
-5. Click **Analyze with Claude**
-6. Review and copy results
-
-### Analyzing a PR
-
-1. Select **Pull Request (PR)**
-2. Enter PR ID, Project, and Repository ID
-3. Click **Fetch Item**
-4. Select analysis types (Code Review, Test Cases, Impact Analysis, Documentation)
-5. Click **Analyze with Claude**
-6. Review and copy results
+1. Enter PBI ID (e.g., `95962`) and Project (e.g., `Testwise`)
+2. Click **Fetch PBI**
+3. Review the PBI details displayed
+4. Click **Generate Manual Test Cases**
+5. Claude AI generates comprehensive manual test cases using the embedded knowledge base
+6. Review the step-by-step test instructions and copy to clipboard for your test plan
 
 ## Architecture
 
@@ -92,6 +85,39 @@ View current status in the Settings page:
 - AWS Bedrock configuration
 - Authentication status
 
+## Embedded Knowledge Base
+
+This application includes a curated knowledge base in the `knowledge/` folder that enhances test case generation:
+
+### What's Included
+
+- **[testing-standards.md](knowledge/testing-standards.md)** - GL Assessment testing standards:
+  - Definition of Ready (DoR) and Definition of Done (DoD)
+  - Acceptance criteria format (Given/When/Then)
+  - Required test types (Cypress, SpecFlow, Jest, TestContainers)
+  - Browser compatibility requirements
+
+- **[glossary.md](knowledge/glossary.md)** - Domain terminology:
+  - Product acronyms (CAT4, NGRT, PASS, etc.)
+  - Technical terms (SAS, NPR, Stanine, Batman, Epoch, etc.)
+  - Infrastructure and repository names
+
+- **[platform-overview.md](knowledge/platform-overview.md)** - Technical context:
+  - Platform architecture and components
+  - Technology stack (Angular, .NET, Azure)
+  - Authentication patterns
+  - Integration points
+
+### How It Works
+
+When you generate test cases, Claude AI automatically receives this knowledge as context, ensuring:
+- Test cases follow GL Assessment standards
+- Domain terminology is understood correctly
+- Tests are appropriate for the technical stack
+- All required test types are included
+
+**No external dependencies required** - everything is self-contained in this repository.
+
 ## Troubleshooting
 
 ### Application won't start
@@ -121,7 +147,7 @@ npm run build
 ## Project Structure
 
 ```
-pbi-pr-analyzer/
+pbi-test-case-generator/
 ├── Launch PBI-PR Analyzer.bat    # Launcher
 ├── server.js                     # Express backend
 ├── package.json                  # Dependencies
