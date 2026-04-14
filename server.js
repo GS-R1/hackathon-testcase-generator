@@ -140,7 +140,40 @@ app.get('/api/workitem/:id', async (req, res) => {
       WorkItemExpand.All // expand
     );
 
-    console.log(`Successfully fetched work item ${workItemId}`);
+    // Validate the work item response
+    if (!workItem) {
+      console.error(`Work item ${workItemId} returned null/undefined`);
+      return res.status(404).json({
+        success: false,
+        error: `Work item ${workItemId} not found or you don't have permission to access it.`,
+        validationError: true
+      });
+    }
+
+    // Check for permissions/access issues - empty fields object is a telltale sign
+    if (!workItem.fields || Object.keys(workItem.fields).length === 0) {
+      console.error(`Work item ${workItemId} has no fields - likely a permissions issue`);
+      return res.status(403).json({
+        success: false,
+        error: `Unable to access work item ${workItemId}. You may not have permission to view this item or it may not exist in the specified project.`,
+        validationError: true
+      });
+    }
+
+    // Validate essential fields exist
+    const hasTitle = workItem.fields['System.Title'];
+    const hasWorkItemType = workItem.fields['System.WorkItemType'];
+
+    if (!hasTitle || !hasWorkItemType) {
+      console.error(`Work item ${workItemId} missing essential fields (Title: ${!!hasTitle}, Type: ${!!hasWorkItemType})`);
+      return res.status(403).json({
+        success: false,
+        error: `Work item ${workItemId} appears incomplete. This usually indicates insufficient permissions or the item doesn't exist.`,
+        validationError: true
+      });
+    }
+
+    console.log(`✓ Successfully fetched work item ${workItemId}: "${workItem.fields['System.Title']}"`);
     res.json({ success: true, data: workItem });
   } catch (error) {
     console.error(`Error fetching work item ${req.params.id}:`, error);
