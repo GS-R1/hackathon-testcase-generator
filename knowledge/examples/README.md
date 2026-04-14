@@ -43,33 +43,6 @@ examples/
    - Test Cases: `user-login-feature.md`
 3. Write comprehensive, high-quality manual test cases
 
-**Example Test Case file structure:**
-```markdown
-# Test Cases for [PBI Title]
-
-## Test Case #1 (TC-001): Happy Path - Successful Login
-
-**Test Scenario**: User successfully logs in with valid credentials
-
-**Preconditions**:
-- User has a valid account
-- User is on the login page
-
-**Test Steps**:
-1. Enter valid username
-2. Enter valid password
-3. Click "Login" button
-
-**Test Data**:
-- Username: test.user@example.com
-- Password: ValidPass123!
-
-**Expected Result**:
-- User is redirected to dashboard
-- Welcome message displays user's name
-
-**Notes**: This is the primary happy path scenario
-
 ---
 
 ## Naming Convention
