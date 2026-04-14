@@ -114,7 +114,10 @@ export class AnalysisComponent {
         this.error = result.error || 'Failed to fetch PBI';
       }
     } catch (error: any) {
-      this.error = error.message || 'An error occurred';
+      // For HTTP errors, the backend error message is in error.error.error
+      // The error object structure is: { error: { success: false, error: "our message" } }
+      this.error = error.error?.error || error.message || 'An error occurred';
+      console.error('Fetch error:', error);
     } finally {
       this.loading = false;
     }
@@ -162,7 +165,8 @@ export class AnalysisComponent {
       }
     } catch (error: any) {
       console.error('Error assessing PBI quality:', error);
-      this.qualityAssessmentError = error.message || 'Failed to assess PBI quality';
+      // For HTTP errors, extract the backend error message
+      this.qualityAssessmentError = error.error?.error || error.message || 'Failed to assess PBI quality';
     } finally {
       this.qualityAssessmentLoading = false;
     }
@@ -265,13 +269,16 @@ export class AnalysisComponent {
         }
         this.error = ''; // Clear any previous errors on success
       } else {
-        this.error = `Failed to generate test cases: ${result.error}`;
+        this.error = result.error || 'Failed to generate test cases';
       }
     } catch (error: any) {
-      this.error = `Error generating test cases: ${error.message}`;
+      // For HTTP errors, extract the backend error message
+      const backendError = error.error?.error || error.message || 'An unexpected error occurred';
+      this.error = `Error generating test cases: ${backendError}`;
+      console.error('Test case generation error:', error);
+    } finally {
+      this.loading = false;
     }
-
-    this.loading = false;
   }
 
   copyToClipboard(content: string) {
