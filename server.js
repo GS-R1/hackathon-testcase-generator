@@ -590,7 +590,7 @@ app.get('/api/workitem/:id', async (req, res) => {
 // Analyze with Claude
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { data, analysisType, userFeedback, previousTestCases, additionalContext } = req.body;
+    const { data, analysisType, userFeedback, previousTestCases, additionalContext, generateAll } = req.body;
 
     // Set up SSE headers for streaming progress
     res.setHeader('Content-Type', 'text/event-stream');
@@ -615,6 +615,13 @@ app.post('/api/analyze', async (req, res) => {
     console.timeEnd('⏱️  Request Context Load');
 
     if (analysisType === 'testCases') {
+      // Log generation mode
+      if (generateAll) {
+        console.log('📋 Generating ALL test cases (comprehensive mode)');
+      } else {
+        console.log('📋 Generating Happy Path + Top 5 Critical tests (focused mode)');
+      }
+
       // Log additional context if provided
       if (additionalContext) {
         console.log('📝 Additional Context from PBI Quality Assessment:');
@@ -628,7 +635,7 @@ app.post('/api/analyze', async (req, res) => {
         console.log('🔄 User Feedback Mode - Improving existing test cases...');
         console.log(`   Feedback: "${userFeedback.substring(0, 100)}${userFeedback.length > 100 ? '...' : ''}"`);
         sendProgress('Regenerating with feedback');
-        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback, additionalContext, sendProgress, requestContext);
+        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback, additionalContext, sendProgress, requestContext, generateAll);
 
         res.write(`data: ${JSON.stringify({
           type: 'complete',
@@ -640,7 +647,7 @@ app.post('/api/analyze', async (req, res) => {
         res.end();
       } else {
         // Use iterative quality generation for initial test cases
-        const result = await generateTestCasesWithQuality(data, additionalContext, sendProgress, requestContext);
+        const result = await generateTestCasesWithQuality(data, additionalContext, sendProgress, requestContext, generateAll);
 
         res.write(`data: ${JSON.stringify({
           type: 'complete',
@@ -1405,7 +1412,7 @@ function buildRequestContext() {
 }
 
 // Prompt builders
-function buildTestCasesPrompt(data, additionalContext, requestContext = null) {
+function buildTestCasesPrompt(data, additionalContext, requestContext = null, generateAll = false) {
   console.log('');
   console.log('🧠 Building test case generation prompt...');
   console.log('--------------------------------------------');
@@ -1558,7 +1565,7 @@ ${additionalContext}
 
 ## Requirements
 
-Generate a comprehensive **MANUAL TEST PLAN** that includes:
+${generateAll ? `Generate a comprehensive **MANUAL TEST PLAN** that includes:
 
 **IMPORTANT: The very first test case (Test Case #1) MUST be the Happy Path scenario - the ideal, successful user journey with valid inputs and expected successful outcomes.**
 
@@ -1632,20 +1639,89 @@ Generate a comprehensive **MANUAL TEST PLAN** that includes:
 11. **Exploratory Testing Suggestions**
     - Areas to explore freely
     - Potential risk areas
-    - Integration points to verify
+    - Integration points to verify` :
+`
+### FOCUSED TEST GENERATION MODE - Generate ONLY 6 Test Cases
+
+**YOU ARE GENERATING A FOCUSED TEST PLAN WITH EXACTLY 6 TEST CASES. NO MORE, NO LESS.**
+
+**List of test cases you will generate:**
+1. TC-001 (Happy Path)
+2. TC-002 (Critical Test #1)
+3. TC-003 (Critical Test #2)
+4. TC-004 (Critical Test #3)
+5. TC-005 (Critical Test #4)
+6. TC-006 (Critical Test #5)
+
+**AFTER TC-006, YOUR RESPONSE MUST END. DO NOT CONTINUE.**
+
+---
+
+**TC-001: Happy Path Test (MANDATORY FIRST TEST)**
+- This MUST be the first test case
+- Cover the primary, successful user journey with valid inputs
+- Format in Given/When/Then structure
+- Include: Test Scenario, Priority, Preconditions, Test Steps, Test Data, Expected Result, Notes
+
+**TC-002 through TC-006: The 5 Most Critical Tests**
+- Identify the 5 MOST CRITICAL tests needed to validate this PBI
+- Prioritize based on:
+  * Risk to business operations
+  * Impact if functionality fails
+  * Coverage of key acceptance criteria
+  * Security/data integrity concerns
+- For EACH of these 5 tests, provide full detail: Test Scenario, Priority, Preconditions, Test Steps, Test Data, Expected Result, Notes
+
+---
+
+**CRITICAL CONSTRAINTS:**
+
+❌ **DO NOT generate TC-007**
+❌ **DO NOT generate TC-008**
+❌ **DO NOT generate TC-009**
+❌ **DO NOT generate TC-010**
+❌ **DO NOT generate TC-011**
+❌ **DO NOT generate TC-012 or higher**
+❌ **DO NOT add a "Part 2" or "Additional Tests" section**
+❌ **DO NOT add summary test suggestions**
+❌ **DO NOT list additional recommended tests**
+
+✅ **END YOUR RESPONSE IMMEDIATELY AFTER TC-006**
+
+The user will request additional tests separately if needed. Your task is to generate ONLY the 6 most important tests.
+`}
 
 ## Test Case Format
 
-For each test case, provide:
-- **Test Case ID**: Unique identifier (e.g., TC-001, TC-002, etc.)
+${generateAll ? `
+For ALL test cases, provide:
+- **Test Case ID**: Unique identifier (TC-001, TC-002, etc.)
 - **Test Scenario**: Brief description
+- **Priority**: Critical/High/Medium/Low
 - **Preconditions**: What must be set up or true before testing
-- **Test Steps**: Numbered, clear, step-by-step instructions
+- **Test Steps**: Numbered, clear, step-by-step instructions in Given/When/Then format
 - **Test Data**: Specific data values to use
 - **Expected Result**: What should happen
 - **Notes**: Any additional context or considerations
 
-**REMINDER: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.**
+**REMINDER**: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.
+` : `
+For EACH of the 6 test cases (TC-001, TC-002, TC-003, TC-004, TC-005, TC-006), provide:
+- **Test Case ID**: TC-001, TC-002, TC-003, TC-004, TC-005, or TC-006 ONLY
+- **Test Scenario**: Brief description
+- **Priority**: Critical/High/Medium/Low
+- **Preconditions**: What must be set up or true before testing
+- **Test Steps**: Numbered, clear, step-by-step instructions in Given/When/Then format
+- **Test Data**: Specific data values to use
+- **Expected Result**: What should happen
+- **Notes**: Any additional context or considerations
+
+**FINAL REMINDER:**
+- TC-001 MUST be the Happy Path
+- Generate exactly 6 tests total
+- After completing TC-006, END your response immediately
+- Do NOT number tests beyond TC-006
+`}
 
 Format the response as a structured, detailed manual test plan organized by category. Use markdown formatting with clear headings, numbered steps, and bullet points. Make it easy for a manual tester to execute.`;
 }
@@ -1774,7 +1850,7 @@ Provide a structured review in this format:
 Be specific about test case IDs and exact issues. Focus on actionable feedback.`;
 }
 
-function buildImprovedTestCasesPrompt(originalTestCases, reviewFeedback, pbiData, knowledgeContext, definitionOfDone) {
+function buildImprovedTestCasesPrompt(originalTestCases, reviewFeedback, pbiData, knowledgeContext, definitionOfDone, generateAll = false) {
   return `${knowledgeContext}
 
 ## PBI Details
@@ -1797,7 +1873,25 @@ Generate IMPROVED test cases that address all the issues identified in the revie
 
 ${definitionOfDone.length > 0 ? `Ensure the improved test cases fully comply with the Definition of Done criteria provided earlier.` : ''}
 
-Maintain the same structure and categories, but fix all identified issues. The improved version should be ready for immediate use by manual testers.
+${!generateAll ? `
+**CRITICAL: You are in FOCUSED MODE - Generate ONLY 6 Test Cases**
+
+You MUST maintain exactly 6 test cases:
+1. TC-001 (Happy Path)
+2. TC-002 (Critical Test #1)
+3. TC-003 (Critical Test #2)
+4. TC-004 (Critical Test #3)
+5. TC-005 (Critical Test #4)
+6. TC-006 (Critical Test #5)
+
+**CONSTRAINTS:**
+❌ DO NOT generate TC-007 or higher
+❌ DO NOT add additional test suggestions
+❌ END YOUR RESPONSE IMMEDIATELY AFTER TC-006
+
+Fix the identified issues in the existing 6 test cases, but maintain exactly 6 tests total.
+
+` : `Maintain the same structure and categories, but fix all identified issues.`}
 
 **REMINDER: Test Case #1 (TC-001) MUST be the Happy Path.**
 
@@ -1836,7 +1930,7 @@ Provide your assessment in this EXACT format:
 Keep your response concise and focused.`;
 }
 
-async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext, progressCallback = null, requestContext = null) {
+async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext, progressCallback = null, requestContext = null, generateAll = false) {
   const knowledge = requestContext?.knowledge || loadKnowledgeBase();
   const standaloneExamples = requestContext?.standaloneExamples || loadStandaloneTestCaseExamples();
   const definitionOfDone = requestContext?.definitionOfDone || loadDefinitionOfDone();
@@ -1927,6 +2021,24 @@ Generate IMPROVED test cases that address the user's feedback while maintaining 
 - Only make changes related to the user's feedback
 - If the user asks for specific changes (e.g., "only give me one test"), follow that instruction exactly
 
+${!generateAll ? `
+**CRITICAL: You are in FOCUSED MODE - Maintain ONLY 6 Test Cases**
+
+You MUST keep exactly 6 test cases:
+1. TC-001 (Happy Path)
+2. TC-002 (Critical Test #1)
+3. TC-003 (Critical Test #2)
+4. TC-004 (Critical Test #3)
+5. TC-005 (Critical Test #4)
+6. TC-006 (Critical Test #5)
+
+**CONSTRAINTS:**
+❌ DO NOT add TC-007 or higher
+❌ DO NOT add additional test suggestions
+❌ END YOUR RESPONSE IMMEDIATELY AFTER TC-006
+
+` : ''}
+
 Generate the complete improved test plan now.`;
 
   console.log('🤖 Calling Claude to improve test cases with user feedback...');
@@ -1954,7 +2066,7 @@ Generate the complete improved test plan now.`;
   };
 }
 
-async function generateTestCasesWithQuality(pbiData, additionalContext, progressCallback = null, requestContext = null) {
+async function generateTestCasesWithQuality(pbiData, additionalContext, progressCallback = null, requestContext = null, generateAll = false) {
   const MAX_ITERATIONS = 3;
   const knowledge = requestContext?.knowledge || loadKnowledgeBase();
   const examples = requestContext?.examples || loadExamples();
@@ -2036,7 +2148,7 @@ ${standaloneExamples.good}
       // First generation
       console.log('  → Generating initial test cases...');
       if (progressCallback) progressCallback('Initial tests generating');
-      const initialPrompt = buildTestCasesPrompt(pbiData, additionalContext, requestContext);
+      const initialPrompt = buildTestCasesPrompt(pbiData, additionalContext, requestContext, generateAll);
       currentTestCases = await invokeClaudeOnBedrock(initialPrompt);
       console.log('  ✓ Initial test cases generated');
     } else {
@@ -2048,7 +2160,8 @@ ${standaloneExamples.good}
         lastReview,
         pbiData,
         knowledgeContext,
-        definitionOfDone
+        definitionOfDone,
+        generateAll
       );
       currentTestCases = await invokeClaudeOnBedrock(improvementPrompt);
       console.log('  ✓ Improved test cases generated');
