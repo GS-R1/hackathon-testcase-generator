@@ -1,0 +1,131 @@
+{
+  "id": 98075,
+  "rev": 8,
+  "fields": {
+    "System.Id": 98075,
+    "System.AreaId": 1417,
+    "System.AreaPath": "Testwise\\Team TARDIS\\Team TARDIS - Rostering",
+    "System.TeamProject": "Testwise",
+    "System.NodeName": "Team TARDIS - Rostering",
+    "System.AreaLevel1": "Testwise",
+    "System.AreaLevel2": "Team TARDIS",
+    "System.AreaLevel3": "Team TARDIS - Rostering",
+    "System.Rev": 8,
+    "System.AuthorizedDate": "2026-04-14T10:01:18.83Z",
+    "System.RevisedDate": "9999-01-01T00:00:00Z",
+    "System.IterationId": 442,
+    "System.IterationPath": "Testwise\\Team Tardis",
+    "System.IterationLevel1": "Testwise",
+    "System.IterationLevel2": "Team Tardis",
+    "System.WorkItemType": "Product Backlog Item",
+    "System.State": "New",
+    "System.Reason": "New backlog item",
+    "System.CreatedDate": "2026-04-14T08:24:17.657Z",
+    "System.CreatedBy": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.ChangedDate": "2026-04-14T10:01:18.83Z",
+    "System.ChangedBy": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.AuthorizedAs": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.PersonId": 124551898,
+    "System.Watermark": 1213767,
+    "System.CommentCount": 0,
+    "System.Title": "User Management UI - Create and Manage Users",
+    "System.BoardColumn": "New",
+    "System.BoardColumnDone": false,
+    "Microsoft.VSTS.Common.StateChangeDate": "2026-04-14T08:24:17.657Z",
+    "Microsoft.VSTS.Common.Priority": 2,
+    "Microsoft.VSTS.Common.ValueArea": "Business",
+    "Microsoft.VSTS.Scheduling.Effort": 13,
+    "WEF_23686557E32B43A894B6B37AF24622FB_System.ExtensionMarker": false,
+    "WEF_23686557E32B43A894B6B37AF24622FB_Kanban.Column": "New",
+    "WEF_23686557E32B43A894B6B37AF24622FB_Kanban.Column.Done": false,
+    "Custom.HiddenBehindFeatureFlag": false,
+    "WEF_971899FEEDE3458F83E2EE8197341977_System.ExtensionMarker": true,
+    "WEF_971899FEEDE3458F83E2EE8197341977_Kanban.Column": "New",
+    "WEF_971899FEEDE3458F83E2EE8197341977_Kanban.Column.Done": false,
+    "WEF_E5E41166570044F9909817F8255875AB_System.ExtensionMarker": true,
+    "WEF_E5E41166570044F9909817F8255875AB_Kanban.Column": "New",
+    "WEF_E5E41166570044F9909817F8255875AB_Kanban.Column.Done": false,
+    "System.Description": "<div><br> </div><div>Build a comprehensive user management interface for school administrators to create, view, and manage users in the Rostering system. </div><div>This Includes user creation, user list with search filtering and sorting, user details view. </div><div><br> </div>",
+    "Microsoft.VSTS.Common.AcceptanceCriteria": "<h3>AC1: Display User List </h3><strong>GIVEN</strong> I am logged in as School Admin<br><strong>WHEN</strong> I navigate to /users<br><strong>THEN</strong> I see paginated list of users in my school<br><br><h3>AC2: Search Users </h3><strong>GIVEN</strong> I am on user list<br><strong>WHEN</strong> I type in search box<br><strong>THEN</strong> list filters with debounced search<br><strong>AND</strong> shows loading indicator<br><br><h3>AC3: Filter by Role </h3><strong>GIVEN</strong> I am on user list<br><strong>WHEN</strong> I select Teacher from role filter<br><strong>THEN</strong> list shows only Teachers<br><strong>AND</strong> filters can be combined<br><br><h3>AC4: Create User with Valid Data </h3><strong>GIVEN</strong> I click New User<br><strong>WHEN</strong> I fill form with valid data and submit<br><strong>THEN</strong> API called, success message shown<br><strong>AND</strong> password reset link displayed<br><strong>AND</strong> list refreshes<br><br><h3>AC5: Validate Email Uniqueness </h3><strong>GIVEN</strong> creating new user<br><strong>WHEN</strong> I enter existing email<br><strong>THEN</strong> error shown on blur<br><strong>AND</strong> Create button disabled<br><br><h3>AC6: Validate Required Fields </h3><strong>GIVEN</strong> creating new user<br><strong>WHEN</strong> I leave required field empty<br><strong>THEN</strong> error message displays<br><strong>AND</strong> Create button disabled<br><br><h3>AC7: Resend Password Reset </h3><strong>GIVEN</strong> viewing user details<br><strong>WHEN</strong> I click Resend Password Reset<br><strong>THEN</strong> confirmation modal appears<br><br><h3>AC8: Deactivate User </h3><strong>GIVEN</strong> viewing active user<br><strong>WHEN</strong> I click Deactivate<br><strong>THEN</strong> confirmation modal with warning<br><br><h3>AC9: Reactivate User </h3><strong>GIVEN</strong> viewing inactive user<br><strong>WHEN</strong> I click Reactivate<br><strong>THEN</strong> confirmation modal appears<br><strong>AND</strong> status changes to Active<br><br><h3><br> </h3><br>",
+    "Custom.APIURLs": "e.g. GetByAccessCodeAsync",
+    "Custom.Report": "e.g. CAT4 IRP",
+    "Custom.Page": "e.g. /sittings",
+    "Custom.Products": "e.g. CAT4",
+    "Custom.MetaData": "e.g. England Independent ",
+    "Custom.SharedComponents": "User Management API (PBI 98067), Authentication Service, Design System",
+    "Custom.DatabaseTables": "e.g. StudentTest",
+    "Custom.AdditionalAreasImpacted": "e.g. UI/UX"
+  },
+  "multilineFieldsFormat": {
+    "System.Description": "html",
+    "Microsoft.VSTS.Common.AcceptanceCriteria": "html",
+    "Custom.APIURLs": "html",
+    "Custom.Report": "html",
+    "Custom.Page": "html",
+    "Custom.Products": "html",
+    "Custom.MetaData": "html",
+    "Custom.SharedComponents": "html",
+    "Custom.DatabaseTables": "html",
+    "Custom.AdditionalAreasImpacted": "html"
+  },
+  "_links": {
+    "self": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98075"
+    },
+    "workItemUpdates": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98075/updates"
+    },
+    "workItemRevisions": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98075/revisions"
+    },
+    "workItemComments": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98075/comments"
+    },
+    "html": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_workitems/edit/98075"
+    },
+    "workItemType": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItemTypes/Product%20Backlog%20Item"
+    },
+    "fields": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/fields"
+    }
+  },
+  "url": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98075"
+}

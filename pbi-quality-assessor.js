@@ -51,52 +51,125 @@ class PBIQualityAssessor {
       bad: []
     };
 
-    // Try to load from knowledge base first
-    const knowledgeBaseDir = path.join(__dirname, 'knowledge', 'examples', 'pbis');
+    // Try to load from knowledge base subdirectories
+    const pbisBaseDir = path.join(__dirname, 'knowledge', 'examples', 'pbis');
 
     let loadedFromKnowledgeBase = false;
 
-    if (fs.existsSync(knowledgeBaseDir)) {
+    if (fs.existsSync(pbisBaseDir)) {
       try {
-        const files = fs.readdirSync(knowledgeBaseDir).filter(f => f.endsWith('.md') && !f.startsWith('.'));
-        if (files.length > 0) {
-          // Load good examples
-          const goodFiles = files.filter(f => f.startsWith('pbi-good-') || f.startsWith('good-'));
+        // Load from good/ subdirectory
+        const goodDir = path.join(pbisBaseDir, 'good');
+        if (fs.existsSync(goodDir)) {
+          const goodFiles = fs.readdirSync(goodDir).filter(f => f.endsWith('.json'));
           for (const file of goodFiles) {
-            examples.good.push(fs.readFileSync(path.join(knowledgeBaseDir, file), 'utf8'));
-          }
-
-          // Load ok examples
-          const okFiles = files.filter(f => f.startsWith('pbi-ok-') || f.startsWith('ok-'));
-          for (const file of okFiles) {
-            examples.ok.push(fs.readFileSync(path.join(knowledgeBaseDir, file), 'utf8'));
-          }
-
-          // Load bad examples
-          const badFiles = files.filter(f => f.startsWith('pbi-bad-') || f.startsWith('bad-'));
-          for (const file of badFiles) {
-            examples.bad.push(fs.readFileSync(path.join(knowledgeBaseDir, file), 'utf8'));
-          }
-
-          if (examples.good.length > 0 || examples.ok.length > 0 || examples.bad.length > 0) {
-            console.log(`Loaded ${examples.good.length} good, ${examples.ok.length} ok, ${examples.bad.length} bad example PBIs from knowledge base`);
-            loadedFromKnowledgeBase = true;
+            try {
+              const content = fs.readFileSync(path.join(goodDir, file), 'utf8');
+              const pbi = JSON.parse(content);
+              examples.good.push(this.formatPBIForPrompt(pbi));
+              console.log(`  ✓ Loaded good example: ${file}`);
+            } catch (error) {
+              console.log(`  ⚠ Could not load ${file}:`, error.message);
+            }
           }
         }
+
+        // Load from okay/ subdirectory
+        const okayDir = path.join(pbisBaseDir, 'okay');
+        if (fs.existsSync(okayDir)) {
+          const okayFiles = fs.readdirSync(okayDir).filter(f => f.endsWith('.json'));
+          for (const file of okayFiles) {
+            try {
+              const content = fs.readFileSync(path.join(okayDir, file), 'utf8');
+              const pbi = JSON.parse(content);
+              examples.ok.push(this.formatPBIForPrompt(pbi));
+              console.log(`  ✓ Loaded okay example: ${file}`);
+            } catch (error) {
+              console.log(`  ⚠ Could not load ${file}:`, error.message);
+            }
+          }
+        }
+
+        // Load from bad/ subdirectory
+        const badDir = path.join(pbisBaseDir, 'bad');
+        if (fs.existsSync(badDir)) {
+          const badFiles = fs.readdirSync(badDir).filter(f => f.endsWith('.json'));
+          for (const file of badFiles) {
+            try {
+              const content = fs.readFileSync(path.join(badDir, file), 'utf8');
+              const pbi = JSON.parse(content);
+              examples.bad.push(this.formatPBIForPrompt(pbi));
+              console.log(`  ✓ Loaded bad example: ${file}`);
+            } catch (error) {
+              console.log(`  ⚠ Could not load ${file}:`, error.message);
+            }
+          }
+        }
+
+        if (examples.good.length > 0 || examples.ok.length > 0 || examples.bad.length > 0) {
+          console.log(`📋 Loaded ${examples.good.length} good, ${examples.ok.length} okay, ${examples.bad.length} bad example PBIs from knowledge base`);
+          loadedFromKnowledgeBase = true;
+        }
       } catch (error) {
-        console.log('Could not read knowledge base directory:', error.message);
+        console.log('⚠ Could not read knowledge base directory:', error.message);
       }
     }
 
     // Fall back to hard-coded synthetic examples if knowledge base is empty
     if (!loadedFromKnowledgeBase) {
-      console.log('Using hard-coded synthetic example PBIs');
+      console.log('ℹ Using hard-coded synthetic example PBIs (no examples found in knowledge base)');
       examples.good.push(this.getSyntheticGoodExample());
       examples.ok.push(this.getSyntheticOkExample());
       examples.bad.push(this.getSyntheticBadExample());
     }
 
     return examples;
+  }
+
+  /**
+   * Format a PBI JSON object into a readable prompt format
+   */
+  formatPBIForPrompt(pbi) {
+    const title = pbi.fields?.['System.Title'] || 'No title';
+    const description = pbi.fields?.['System.Description'] || 'No description';
+    const acceptanceCriteria = pbi.fields?.['Microsoft.VSTS.Common.AcceptanceCriteria'] || 'No acceptance criteria';
+    const state = pbi.fields?.['System.State'] || 'Unknown';
+    const effort = pbi.fields?.['Microsoft.VSTS.Scheduling.Effort'] || 'Not estimated';
+
+    // Strip HTML tags for cleaner display
+    const cleanDescription = this.stripHtml(description);
+    const cleanAcceptanceCriteria = this.stripHtml(acceptanceCriteria);
+
+    return `**PBI ID**: ${pbi.id}
+**Title**: ${title}
+**State**: ${state}
+**Effort**: ${effort}
+
+**Description**:
+${cleanDescription}
+
+**Acceptance Criteria**:
+${cleanAcceptanceCriteria}`;
+  }
+
+  /**
+   * Simple HTML tag stripper
+   */
+  stripHtml(html) {
+    if (!html) return '';
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/div>/gi, '\n')
+      .replace(/<\/p>/gi, '\n\n')
+      .replace(/<li>/gi, '- ')
+      .replace(/<\/li>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\n\n+/g, '\n\n')
+      .trim();
   }
 
   getSyntheticGoodExample() {
@@ -310,40 +383,67 @@ Take your responsibility seriously. Be thorough. Be specific. Be helpful.`;
 
     // Format good examples
     if (this.examples.good.length > 0) {
-      formatted += '### EXAMPLE: GOOD PBI\n\n';
-      formatted += this.examples.good[0]; // Use first good example
-      formatted += '\n\n**Why this is GOOD:**\n';
-      formatted += '- Clear user story with business value quantified\n';
+      formatted += '### EXAMPLES: GOOD PBIs\n\n';
+      formatted += `You have ${this.examples.good.length} example(s) of GOOD quality PBIs to learn from:\n\n`;
+
+      this.examples.good.forEach((example, index) => {
+        formatted += `#### Good Example ${index + 1}:\n\n`;
+        formatted += example;
+        formatted += '\n\n';
+      });
+
+      formatted += '**Why these are GOOD:**\n';
+      formatted += '- Clear, specific title with well-defined scope\n';
+      formatted += '- Detailed description with user story, background, and context\n';
       formatted += '- Comprehensive acceptance criteria in Given-When-Then format\n';
-      formatted += '- Technical requirements specified\n';
-      formatted += '- Complete Definition of Done\n';
-      formatted += '- Risk assessment with mitigations\n';
-      formatted += '- Sufficient context for implementation\n\n';
+      formatted += '- Technical requirements specified (API, database, authentication, etc.)\n';
+      formatted += '- Business value and functional requirements clearly articulated\n';
+      formatted += '- Sufficient detail for implementation without constant clarification\n';
+      formatted += '- All custom fields populated with real values (not placeholders)\n\n';
     }
 
-    // Format ok examples
+    // Format okay examples
     if (this.examples.ok.length > 0) {
-      formatted += '### EXAMPLE: OK PBI\n\n';
-      formatted += this.examples.ok[0]; // Use first ok example
-      formatted += '\n\n**Why this is OK (but could be better):**\n';
-      formatted += '- Basic acceptance criteria present but not comprehensive\n';
-      formatted += '- Some business value mentioned but not quantified\n';
-      formatted += '- Technical requirements incomplete\n';
-      formatted += '- Definition of Done basic but workable\n';
-      formatted += '- Acceptable for implementation but will need clarification\n\n';
+      formatted += '### EXAMPLES: OKAY PBIs\n\n';
+      formatted += `You have ${this.examples.ok.length} example(s) of OKAY quality PBIs:\n\n`;
+
+      this.examples.ok.forEach((example, index) => {
+        formatted += `#### Okay Example ${index + 1}:\n\n`;
+        formatted += example;
+        formatted += '\n\n';
+      });
+
+      formatted += '**Why these are OKAY (but could be better):**\n';
+      formatted += '- Basic structure present but lacks detail in key areas\n';
+      formatted += '- Acceptance criteria exist but may have gaps or contradictions\n';
+      formatted += '- Some technical requirements but incomplete specifications\n';
+      formatted += '- May have grammar errors or unclear language\n';
+      formatted += '- Placeholder text not fully removed from custom fields\n';
+      formatted += '- Usable for implementation but will require clarification questions\n';
+      formatted += '- Missing sections or inconsistent data model references\n\n';
     }
 
     // Format bad examples
     if (this.examples.bad.length > 0) {
-      formatted += '### EXAMPLE: BAD PBI\n\n';
-      formatted += this.examples.bad[0]; // Use first bad example
-      formatted += '\n\n**Why this is BAD:**\n';
-      formatted += '- Vague description with no clear goal\n';
-      formatted += '- No meaningful acceptance criteria\n';
-      formatted += '- No business value articulated\n';
-      formatted += '- Missing technical requirements\n';
-      formatted += '- Insufficient information for implementation\n';
-      formatted += '- Would require extensive clarification before work can begin\n\n';
+      formatted += '### EXAMPLES: BAD PBIs\n\n';
+      formatted += `You have ${this.examples.bad.length} example(s) of BAD quality PBIs:\n\n`;
+
+      this.examples.bad.forEach((example, index) => {
+        formatted += `#### Bad Example ${index + 1}:\n\n`;
+        formatted += example;
+        formatted += '\n\n';
+      });
+
+      formatted += '**Why these are BAD:**\n';
+      formatted += '- Vague or missing user story (no As a... I want... So that...)\n';
+      formatted += '- Very brief description lacking context and detail\n';
+      formatted += '- Incomplete or vague acceptance criteria\n';
+      formatted += '- Missing critical sections (background, scope, technical requirements)\n';
+      formatted += '- Placeholder text not replaced with actual values\n';
+      formatted += '- Undefined terms and missing specifications\n';
+      formatted += '- No error handling, edge cases, or authorization logic\n';
+      formatted += '- Insufficient information - would require extensive clarification\n';
+      formatted += '- Not ready for development without major revisions\n\n';
     }
 
     return formatted;

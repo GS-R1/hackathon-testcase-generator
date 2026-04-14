@@ -1,0 +1,139 @@
+{
+  "id": 98086,
+  "rev": 2,
+  "fields": {
+    "System.Id": 98086,
+    "System.AreaId": 1417,
+    "System.AreaPath": "Testwise\\Team TARDIS\\Team TARDIS - Rostering",
+    "System.TeamProject": "Testwise",
+    "System.NodeName": "Team TARDIS - Rostering",
+    "System.AreaLevel1": "Testwise",
+    "System.AreaLevel2": "Team TARDIS",
+    "System.AreaLevel3": "Team TARDIS - Rostering",
+    "System.Rev": 2,
+    "System.AuthorizedDate": "2026-04-14T10:24:50.75Z",
+    "System.RevisedDate": "9999-01-01T00:00:00Z",
+    "System.IterationId": 442,
+    "System.IterationPath": "Testwise\\Team Tardis",
+    "System.IterationLevel1": "Testwise",
+    "System.IterationLevel2": "Team Tardis",
+    "System.WorkItemType": "Product Backlog Item",
+    "System.State": "New",
+    "System.Reason": "New backlog item",
+    "System.CreatedDate": "2026-04-14T10:15:51.637Z",
+    "System.CreatedBy": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.ChangedDate": "2026-04-14T10:24:50.75Z",
+    "System.ChangedBy": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.AuthorizedAs": {
+      "displayName": "Anderson Egwurugwu",
+      "url": "https://spsprodweu3.vssps.visualstudio.com/Aae9aae5f-5ee2-482d-8bd2-021bb01a6a9b/_apis/Identities/308596eb-b702-633e-97fa-07408cd33a29",
+      "_links": {
+        "avatar": {
+          "href": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+        }
+      },
+      "id": "308596eb-b702-633e-97fa-07408cd33a29",
+      "uniqueName": "anderson.egwurugwu@thetestfactory.com",
+      "imageUrl": "https://dev.azure.com/gl-development/_apis/GraphProfile/MemberAvatars/aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5",
+      "descriptor": "aad.MzA4NTk2ZWItYjcwMi03MzNlLTk3ZmEtMDc0MDhjZDMzYTI5"
+    },
+    "System.PersonId": 124551898,
+    "System.Watermark": 1213769,
+    "System.CommentCount": 1,
+    "System.Title": "Add Management Functionality for teachers to Rostering API",
+    "System.BoardColumn": "New",
+    "System.BoardColumnDone": false,
+    "Microsoft.VSTS.Common.StateChangeDate": "2026-04-14T10:15:51.637Z",
+    "Microsoft.VSTS.Common.Priority": 2,
+    "Microsoft.VSTS.Common.ValueArea": "Business",
+    "Microsoft.VSTS.Scheduling.Effort": 13,
+    "Custom.HiddenBehindFeatureFlag": false,
+    "WEF_971899FEEDE3458F83E2EE8197341977_System.ExtensionMarker": true,
+    "WEF_971899FEEDE3458F83E2EE8197341977_Kanban.Column": "New",
+    "WEF_971899FEEDE3458F83E2EE8197341977_Kanban.Column.Done": false,
+    "WEF_E5E41166570044F9909817F8255875AB_System.ExtensionMarker": true,
+    "WEF_E5E41166570044F9909817F8255875AB_Kanban.Column": "New",
+    "WEF_E5E41166570044F9909817F8255875AB_Kanban.Column.Done": false,
+    "System.Description": "<div><b>User Story</b> </div><div>As a teacher </div><div>I want to add new students to the Rostering system </div><div>So that i can access their details view sittings and active logs&nbsp; </div><div><br> </div><div><br> </div><div><b>Scope</b> </div><div>This PBI focuses on the API layer for students creation.&nbsp; </div><div><br> </div><div><b>Functional Requirements</b> </div><div><ul><li>Create new students&nbsp; </li><li>Validate student data created </li><li>Verify activation email is sent </li><li>Audit log all user creation events </li> </ul> </div><div><br> </div><div><b>Technical Requirements</b> </div><div><ul><li>RESTful API endpoint: POST /api/1/students </li><li>Authorization: Admin, School Admin or teachers&nbsp; </li><li>Database: User, students, UserSchool tables </li> </ul> </div><div><br> </div><div><br> </div>",
+    "Microsoft.VSTS.Common.AcceptanceCriteria": "<div><b>Acceptance Criteria</b> </div><div><br> </div><div><b>AC1: Create User with Valid Data</b> </div><div>GIVEN I am authenticated as teacher </div><div>WHEN I POST a student creation request with valid data </div><div>THEN the student is created in the database </div><div>AND the API returns 201 Created with the user details </div><div><br> </div><div><br> </div><div><b>AC2: Email Uniqueness Validation</b> </div><div>GIVEN a student already exists </div><div>WHEN I POST a user creation request with the same email </div><div>THEN the API returns 400 Bad Request </div><div>AND the error message states 'Email already exists' </div><div>AND no user is created </div><div><br> </div><div><b>AC3: Authorization Check</b> </div><div>GIVEN I am authenticated as a Teacher (non-admin) user </div><div>WHEN I POST a user creation request </div><div>THEN the API returns 403 Forbidden </div><div>AND the error message states 'Insufficient permissions' </div><div><br> </div><div><b>AC4: School Association Validation</b> </div><div>GIVEN I am a School Admin for School A </div><div>WHEN I POST a student creation request&nbsp; </div><div>THEN the API returns 403 Forbidden </div><div>AND the error message states 'Cannot create users for other schools' </div><div><br> </div><div><b>AC5: Welcome Email Sent</b> </div><div>GIVEN I POST a student creation request to welcome </div><div>WHEN the student is successfully created </div><div>THEN a welcome email is sent to the user's email address </div><div>AND the email contains the password reset link </div><div>AND the link expires in 7 days </div><div><br> </div><div><b>AC6: Input Validation</b> </div><div>GIVEN I POST a user creation request with invalid data </div><div>WHEN any required field is missing or invalid (invalid email format, empty name, invalid role) </div><div>THEN the API returns 400 Bad Request </div><div>AND the error response contains specific validation messages for each field </div><div><br> </div><div><b>AC8: Audit Logging</b> </div><div>GIVEN I successfully create a student </div><div>WHEN the operation completes </div><div>THEN an audit log entry is created with: userId, createdBy, timestamp, schoolId, role </div><div>AND the log is stored in the AuditLog table </div><div><br> </div><div><b>AC9: Idempotency</b> </div><div>GIVEN I POST the same student creation request twice within 5 minutes </div><div>WHEN the second request has an identical idempotency key </div><div>THEN the API returns the existing user (201 or 200) </div><div>AND no duplicate user is created </div><div><br> </div><div><b>AC10: Error Handling</b> </div><div>GIVEN the database is unavailable </div><div>WHEN I POST a user creation request </div><div>THEN the API returns 503 Service Unavailable </div><div>AND the error is logged </div><div>AND no partial data is committed </div>",
+    "Custom.APIURLs": "POST /api/1/users",
+    "Custom.Report": "e.g. CAT4 IRP",
+    "Custom.Page": "e.g. /sittings",
+    "Custom.Products": "e.g. CAT4",
+    "Custom.MetaData": "e.g. England Independent ",
+    "Custom.SharedComponents": "Authentication Service, Email Service",
+    "Custom.DatabaseTables": "User, UserRole, UserSchool, AuditLog",
+    "Custom.AdditionalAreasImpacted": "e.g. UI/UX"
+  },
+  "multilineFieldsFormat": {
+    "System.Description": "html",
+    "Microsoft.VSTS.Common.AcceptanceCriteria": "html",
+    "Custom.APIURLs": "html",
+    "Custom.Report": "html",
+    "Custom.Page": "html",
+    "Custom.Products": "html",
+    "Custom.MetaData": "html",
+    "Custom.SharedComponents": "html",
+    "Custom.DatabaseTables": "html",
+    "Custom.AdditionalAreasImpacted": "html"
+  },
+  "relations": [
+    {
+      "rel": "System.LinkTypes.Related",
+      "url": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98067",
+      "attributes": {
+        "isLocked": false,
+        "comment": "Anderson Egwurugwu mentioned work item #98067 in #98086",
+        "name": "Related"
+      }
+    }
+  ],
+  "_links": {
+    "self": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98086"
+    },
+    "workItemUpdates": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98086/updates"
+    },
+    "workItemRevisions": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98086/revisions"
+    },
+    "workItemComments": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98086/comments"
+    },
+    "html": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_workitems/edit/98086"
+    },
+    "workItemType": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItemTypes/Product%20Backlog%20Item"
+    },
+    "fields": {
+      "href": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/fields"
+    }
+  },
+  "url": "https://dev.azure.com/gl-development/05b52adf-fc85-44c8-963d-50370e6f628c/_apis/wit/workItems/98086"
+}
