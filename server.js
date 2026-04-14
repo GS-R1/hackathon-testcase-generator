@@ -1563,9 +1563,51 @@ ${additionalContext}
 ---
 ` : ''}
 
+# CRITICAL INSTRUCTION: Response Structure
+
+Your response must follow this exact structure:
+
+**1. Test Suite Summary Section (FIRST - appears before TC-001):**
+If there are critical gaps, assumptions, dependencies, or scope clarifications that testers need to know, include a brief summary section BEFORE TC-001:
+
+\`\`\`markdown
+## Test Suite Summary
+
+### Critical Gaps Identified
+[List any critical gaps in the PBI that affect testing - keep brief, 2-4 bullet points max]
+
+### Assumptions Made
+[List key assumptions made for test generation - keep brief, 2-4 bullet points max]
+
+### Test Case Dependencies
+[List any prerequisites or dependencies needed before testing can begin - e.g., "Requires DEVCI environment access", "Database must be seeded with test data", "API endpoints must be deployed"]
+
+### Out of Scope
+[Clearly state what is NOT covered by these test cases - e.g., "Performance testing", "Security penetration testing", "Load testing under 1000+ concurrent users"]
+
+### Risk Assessment
+[Brief risk summary if applicable - 1-2 sentences highlighting the highest risk areas]
+\`\`\`
+
+**2. Test Cases Section (MAIN CONTENT):**
+Immediately after the summary (or if no summary needed, start your response here), begin with TC-001 and continue with all test cases.
+
+**IMPORTANT:**
+- Keep the summary section EXTREMELY CONCISE - use bullet points, not paragraphs
+- Target: 150-200 words MAXIMUM for the entire summary section
+- Each subsection should have 2-4 bullet points max - be brief and direct
+- Only include sections that are truly relevant - omit sections if they don't apply
+- If the PBI is clear and complete with no significant gaps or dependencies, skip the summary section entirely and start directly with TC-001
+- Do NOT include lengthy explanations, PBI critiques, or extensive action items
+- Focus on what testers MUST know, not nice-to-know information
+
+---
+
 ## Requirements
 
 ${generateAll ? `Generate a comprehensive **MANUAL TEST PLAN** that includes:
+
+**REMINDER: Begin your response directly with test cases. Do NOT include PBI quality assessment, gaps analysis, or assumptions sections.**
 
 **IMPORTANT: The very first test case (Test Case #1) MUST be the Happy Path scenario - the ideal, successful user journey with valid inputs and expected successful outcomes.**
 
@@ -1643,6 +1685,8 @@ ${generateAll ? `Generate a comprehensive **MANUAL TEST PLAN** that includes:
 `
 ### FOCUSED TEST GENERATION MODE - Generate ONLY 6 Test Cases
 
+**REMINDER: Begin your response directly with TC-001. Do NOT include PBI quality assessment, gaps analysis, or assumptions sections.**
+
 **YOU ARE GENERATING A FOCUSED TEST PLAN WITH EXACTLY 6 TEST CASES. NO MORE, NO LESS.**
 
 **List of test cases you will generate:**
@@ -1704,7 +1748,10 @@ For ALL test cases, provide:
 - **Expected Result**: What should happen
 - **Notes**: Any additional context or considerations
 
-**REMINDER**: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.
+**REMINDER**:
+- Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.
+- Do NOT include PBI quality commentary or assessment - just generate test cases.
+- Begin your response directly with the test cases.
 ` : `
 For EACH of the 6 test cases (TC-001, TC-002, TC-003, TC-004, TC-005, TC-006), provide:
 - **Test Case ID**: TC-001, TC-002, TC-003, TC-004, TC-005, or TC-006 ONLY
@@ -1721,9 +1768,12 @@ For EACH of the 6 test cases (TC-001, TC-002, TC-003, TC-004, TC-005, TC-006), p
 - Generate exactly 6 tests total
 - After completing TC-006, END your response immediately
 - Do NOT number tests beyond TC-006
+- Do NOT include PBI quality commentary - just generate test cases
 `}
 
-Format the response as a structured, detailed manual test plan organized by category. Use markdown formatting with clear headings, numbered steps, and bullet points. Make it easy for a manual tester to execute.`;
+Format the response as a structured, detailed manual test plan organized by category. Use markdown formatting with clear headings, numbered steps, and bullet points. Make it easy for a manual tester to execute.
+
+**Begin your response directly with the test cases. Do not include introductory text, PBI critiques, or quality assessments.**`;
 }
 
 function buildImpactAnalysisPrompt(data) {
@@ -1871,6 +1921,8 @@ ${reviewFeedback}
 
 Generate IMPROVED test cases that address all the issues identified in the review feedback.
 
+**DO NOT include PBI quality assessment, gaps analysis, or assumptions sections. Generate test cases only.**
+
 ${definitionOfDone.length > 0 ? `Ensure the improved test cases fully comply with the Definition of Done criteria provided earlier.` : ''}
 
 ${!generateAll ? `
@@ -2012,6 +2064,8 @@ The user has reviewed the test cases above and provided the following feedback:
 # Your Task
 
 Generate IMPROVED test cases that address the user's feedback while maintaining all the good aspects of the previous version.
+
+**DO NOT include PBI quality assessment, gaps analysis, or assumptions sections. Generate test cases only.**
 
 **Instructions:**
 - Keep the same structure and format

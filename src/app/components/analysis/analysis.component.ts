@@ -10,7 +10,7 @@ interface AnalysisResult {
   type: string;
   content: string;
   htmlContent: SafeHtml;
-  preambleHtml?: SafeHtml; // Content before TC-001 (PBI summary, analysis, etc.)
+  preambleHtml?: SafeHtml; // Content before TC-001 (test suite summary, quality assessment, analysis, etc.)
   mainTestCasesHtml?: SafeHtml; // Main test cases content
   additionalTestsHtml?: SafeHtml; // Additional tests if any
   timestamp: Date;
@@ -406,7 +406,7 @@ export class AnalysisComponent implements OnDestroy {
     }, 8000);
   }
 
-  // Extract content before TC-001 (PBI summary, analysis, etc.)
+  // Extract content before TC-001 (test suite summary, quality assessment, analysis, etc.)
   extractPreamble(content: string): string {
     const tc001Match = content.match(/^(.*?)(?=##?\s*TC-001)/s);
     return tc001Match ? tc001Match[1].trim() : '';
