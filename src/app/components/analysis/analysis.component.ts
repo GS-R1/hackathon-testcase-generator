@@ -1,22 +1,19 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../services/api.service';
 import { marked } from 'marked';
+import { TestPlanExportModalComponent } from '../test-plan-export-modal/test-plan-export-modal.component';
 
 interface AnalysisResult {
   type: string;
   content: string;
   htmlContent: SafeHtml;
-  preambleHtml?: SafeHtml; // Content before TC-001 (PBI summary, analysis, etc.)
-  mainTestCasesHtml?: SafeHtml;
-  additionalTestsHtml?: SafeHtml;
   timestamp: Date;
   qualityScore?: string;
   qualityScoreHtml?: SafeHtml;
   iterations?: number;
-  isFocusedGeneration?: boolean; // True if this was Happy Path + Top 5 only
 }
 
 interface QualityAssessment {
@@ -42,11 +39,11 @@ interface QualityAssessment {
 @Component({
   selector: 'app-analysis',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TestPlanExportModalComponent],
   templateUrl: './analysis.component.html',
   styleUrl: './analysis.component.scss'
 })
-export class AnalysisComponent {
+export class AnalysisComponent implements OnDestroy {
   itemId: string = '';
   project: string = '';
 
@@ -60,11 +57,16 @@ export class AnalysisComponent {
   consolidatedResponse: string = '';
   showContextForm: boolean = false;
   showJustification: boolean = false;
-  showAdditionalInfo: boolean = false;
-  showAdditionalTests: boolean = false;
 
   analysisResults: AnalysisResult[] = [];
   userFeedback: string = '';
+  showExportModal: boolean = false;
+  exportSuccess: string = '';
+
+  // Progress tracking
+  generatingDots: string = '';
+  generatingInterval: any = null;
+  progressMessage: string = '';
 
   constructor(
     private apiService: ApiService,
@@ -204,7 +206,7 @@ export class AnalysisComponent {
     return prompts;
   }
 
-  async generateTestCases(withFeedback: boolean = false, generateAll: boolean = false) {
+  async generateTestCases(withFeedback: boolean = false) {
     if (!this.itemData) {
       this.error = 'Please fetch a PBI first';
       return;
@@ -228,6 +230,8 @@ export class AnalysisComponent {
 
     this.loading = true;
     this.error = '';
+    this.startGeneratingAnimation();
+    this.progressMessage = withFeedback ? 'Regenerating with feedback' : 'Starting tests generation';
 
     // Get the previous test cases if providing feedback
     const previousTestCases = withFeedback && this.analysisResults.length > 0
@@ -237,8 +241,7 @@ export class AnalysisComponent {
     // Build additional context from quality assessment improvement points
     const additionalContext = this.buildAdditionalContext();
 
-    if (!withFeedback && !generateAll) {
-      // Only clear results if this is a new generation (not feedback, not generate-all)
+    if (!withFeedback) {
       this.analysisResults = [];
       this.userFeedback = '';
     }
@@ -250,7 +253,10 @@ export class AnalysisComponent {
         withFeedback ? this.userFeedback : undefined,
         previousTestCases,
         additionalContext || undefined,
-        generateAll
+        (message: string) => {
+          // Update progress message from server
+          this.progressMessage = message;
+        }
       );
 
       if (result.success) {
@@ -261,31 +267,14 @@ export class AnalysisComponent {
           qualityScoreHtml = this.sanitizer.sanitize(1, marked.parse(result.qualityScore)) || '';
         }
 
-        // Extract preamble, main test cases, and additional tests
-        const preambleContent = this.extractPreamble(result.data);
-        const mainTestCasesContent = this.extractMainTestCases(result.data);
-        const additionalTestsContent = this.extractAdditionalTestInfo(result.data);
-
-        const preambleHtml = preambleContent
-          ? this.sanitizer.sanitize(1, marked.parse(preambleContent)) || ''
-          : undefined;
-        const mainTestCasesHtml = this.sanitizer.sanitize(1, marked.parse(mainTestCasesContent)) || '';
-        const additionalTestsHtml = additionalTestsContent
-          ? this.sanitizer.sanitize(1, marked.parse(additionalTestsContent)) || ''
-          : undefined;
-
         this.analysisResults.push({
           type: 'testCases',
           content: result.data,
           htmlContent: this.sanitizer.sanitize(1, htmlContent) || '',
-          preambleHtml: preambleHtml,
-          mainTestCasesHtml: mainTestCasesHtml,
-          additionalTestsHtml: additionalTestsHtml,
           timestamp: new Date(),
           qualityScore: result.qualityScore,
           qualityScoreHtml: qualityScoreHtml,
-          iterations: result.iterations,
-          isFocusedGeneration: !generateAll && !withFeedback // Mark as focused if not generating all and not feedback
+          iterations: result.iterations
         });
 
         // Clear feedback and error after successful regeneration
@@ -303,7 +292,28 @@ export class AnalysisComponent {
       console.error('Test case generation error:', error);
     } finally {
       this.loading = false;
+      this.stopGeneratingAnimation();
     }
+  }
+
+  startGeneratingAnimation() {
+    this.generatingDots = '';
+    this.generatingInterval = setInterval(() => {
+      if (this.generatingDots === '...') {
+        this.generatingDots = '';
+      } else {
+        this.generatingDots += '.';
+      }
+    }, 500); // Update every 500ms
+  }
+
+  stopGeneratingAnimation() {
+    if (this.generatingInterval) {
+      clearInterval(this.generatingInterval);
+      this.generatingInterval = null;
+    }
+    this.generatingDots = '';
+    this.progressMessage = '';
   }
 
   copyToClipboard(content: string) {
@@ -349,61 +359,33 @@ export class AnalysisComponent {
     this.showJustification = !this.showJustification;
   }
 
-  toggleAdditionalInfo() {
-    this.showAdditionalInfo = !this.showAdditionalInfo;
+  openExportModal() {
+    if (!this.analysisResults.length) {
+      this.error = 'No test cases to export';
+      return;
+    }
+
+    this.showExportModal = true;
   }
 
-  toggleAdditionalTests() {
-    this.showAdditionalTests = !this.showAdditionalTests;
+  closeExportModal() {
+    this.showExportModal = false;
   }
 
-  extractPreamble(content: string): string {
-    // Extract everything before the first test case (TC-001)
-    const tc001Match = content.search(/###\s*TC-001/i);
-    if (tc001Match > 0) {
-      return content.substring(0, tc001Match).trim();
+  onExported(data: any) {
+    this.exportSuccess = `Successfully exported ${data.testCasesCreated} test case(s) to Azure DevOps!`;
+
+    if (data.testCasesFailed > 0) {
+      this.exportSuccess += ` (${data.testCasesFailed} failed)`;
     }
-    return ''; // No preamble found
+
+    setTimeout(() => {
+      this.exportSuccess = '';
+    }, 8000);
   }
 
-  extractMainTestCases(content: string): string {
-    // Extract from TC-001 through TC-006 only (or until Part 2/TC-007)
-    const tc001Match = content.search(/###\s*TC-001/i);
-    if (tc001Match < 0) {
-      return content; // No TC-001 found, return all
-    }
-
-    // Find where to stop: either TC-007 or Part 2
-    const tc007Match = content.search(/###\s*TC-007/i);
-    const part2Match = content.search(/##?\s*(Part 2|Additional Suggested Tests|PART 2)/i);
-
-    // Find the earliest endpoint
-    let endIndex = -1;
-    if (tc007Match > tc001Match && (endIndex === -1 || tc007Match < endIndex)) {
-      endIndex = tc007Match;
-    }
-    if (part2Match > tc001Match && (endIndex === -1 || part2Match < endIndex)) {
-      endIndex = part2Match;
-    }
-
-    if (endIndex > tc001Match) {
-      return content.substring(tc001Match, endIndex).trim();
-    }
-
-    // No endpoint found, return from TC-001 to end
-    return content.substring(tc001Match).trim();
-  }
-
-  extractAdditionalTestInfo(content: string): string {
-    // Extract the Part 2 / Additional Suggested Tests section
-    const part2Match = content.match(/(##?\s*(Part 2|Additional Suggested Tests|PART 2)[\s\S]*)/i);
-    if (part2Match) {
-      return part2Match[0].trim();
-    }
-    return ''; // No additional tests found
-  }
-
-  hasAdditionalTests(content: string): boolean {
-    return content.search(/##?\s*(Part 2|Additional Suggested Tests|PART 2)/i) > 0;
+  ngOnDestroy() {
+    // Clean up intervals to prevent memory leaks
+    this.stopGeneratingAnimation();
   }
 }

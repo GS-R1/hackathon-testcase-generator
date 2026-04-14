@@ -11,9 +11,39 @@ const path = require('path');
  */
 
 class PBIQualityAssessor {
-  constructor() {
-    this.examples = this.loadExamples();
-    this.knowledge = this.loadKnowledgeBase();
+  constructor(requestContext = null) {
+    // Use pre-loaded context if available (avoids duplicate file I/O)
+    if (requestContext) {
+      this.knowledge = requestContext.knowledge;
+      this.examples = requestContext.examples ? this.convertExamplesFormat(requestContext.examples) : this.loadExamples();
+      console.log('📚 PBI Quality Assessor using pre-loaded request context (no duplicate file I/O)');
+    } else {
+      // Fallback to file loading for standalone use
+      this.examples = this.loadExamples();
+      this.knowledge = this.loadKnowledgeBase();
+    }
+  }
+
+  /**
+   * Convert examples from server.js format to PBIQualityAssessor format
+   * Server format: Array of {name, pbi, testCases}
+   * Assessor format: {good: [], ok: [], bad: []}
+   */
+  convertExamplesFormat(serverExamples) {
+    // For now, treat all examples as "good" since server doesn't categorize by quality
+    // This is a simplification - ideally we'd have quality-categorized examples in knowledge base
+    return {
+      good: serverExamples.map(ex => this.formatTextForPrompt(ex.pbi)),
+      ok: [],
+      bad: []
+    };
+  }
+
+  /**
+   * Format text PBI content for prompt (used when examples come from text files)
+   */
+  formatTextForPrompt(pbiText) {
+    return pbiText; // Already formatted as text
   }
 
   /**

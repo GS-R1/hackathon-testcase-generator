@@ -1,0 +1,116 @@
+<div class="modal-overlay" (click)="closeModal()">
+  <div class="modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Export Test Cases to Azure DevOps</h2>
+      <button class="close-button" (click)="closeModal()">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="error-message" *ngIf="error">
+        <strong>Error:</strong> {{ error }}
+      </div>
+
+      <!-- Test Plan Selection -->
+      <div class="form-section">
+        <label>Select Test Plan:</label>
+        <select [(ngModel)]="selectedPlanId" (change)="onPlanChange()" [disabled]="loading">
+          <option value="">-- Select Test Plan --</option>
+          <option *ngFor="let plan of testPlans" [value]="plan.id">{{ plan.name }}</option>
+          <option value="other">+ Create New Test Plan</option>
+        </select>
+      </div>
+
+      <!-- New Test Plan Form -->
+      <div class="form-section" *ngIf="showNewPlanForm">
+        <label>New Test Plan Name:</label>
+        <input
+          type="text"
+          [(ngModel)]="newPlanName"
+          placeholder="Enter test plan name"
+          class="form-control">
+
+        <label>Area Path:</label>
+        <select [(ngModel)]="selectedAreaPath" class="form-control">
+          <option *ngFor="let area of areaPaths" [value]="area">{{ area }}</option>
+        </select>
+        <small>Select the area path for this test plan</small>
+
+        <label>Iteration:</label>
+        <select [(ngModel)]="selectedIteration" class="form-control">
+          <option *ngFor="let iteration of iterationPaths" [value]="iteration">{{ iteration }}</option>
+        </select>
+        <small>Select the iteration/sprint for this test plan</small>
+      </div>
+
+      <!-- Test Suite Selection -->
+      <div class="form-section" *ngIf="selectedPlanId && selectedPlanId !== 'other'">
+        <label>Select Test Suite:</label>
+        <select [(ngModel)]="selectedSuiteId" (change)="onSuiteChange()" [disabled]="loading">
+          <option value="">-- Select Test Suite --</option>
+          <option *ngFor="let suite of testSuites" [value]="suite.id">{{ suite.name }}</option>
+          <option value="other">+ Create New Test Suite</option>
+        </select>
+      </div>
+
+      <!-- New Test Suite Form -->
+      <div class="form-section" *ngIf="showNewSuiteForm || (showNewPlanForm && selectedPlanId === 'other')">
+        <label>New Test Suite Name:</label>
+        <input
+          type="text"
+          [(ngModel)]="newSuiteName"
+          placeholder="Enter test suite name (default: Test Cases)"
+          class="form-control">
+
+        <label>Suite Type:</label>
+        <div class="radio-group">
+          <label>
+            <input
+              type="radio"
+              [(ngModel)]="newSuiteType"
+              value="StaticTestSuite">
+            Static Suite (simple folder for test cases)
+          </label>
+          <label>
+            <input
+              type="radio"
+              [(ngModel)]="newSuiteType"
+              value="RequirementTestSuite">
+            Requirement-Based Suite (linked to PBI/User Story)
+          </label>
+        </div>
+
+        <div *ngIf="newSuiteType === 'RequirementTestSuite'">
+          <label>Requirement ID (PBI/User Story):</label>
+          <input
+            type="number"
+            [(ngModel)]="requirementId"
+            [placeholder]="pbiId ? 'Leave empty to use current PBI (' + pbiId + ')' : 'Enter requirement ID'"
+            class="form-control">
+          <small *ngIf="pbiId">Leave empty to automatically link to current PBI ({{ pbiId }})</small>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="summary-section" *ngIf="canSubmit()">
+        <h3>Summary</h3>
+        <p><strong>Test Plan:</strong> {{ getSelectedPlanName() }}</p>
+        <p><strong>Test Suite:</strong> {{ getSelectedSuiteName() }}</p>
+        <p *ngIf="showNewSuiteForm || selectedPlanId === 'other'">
+          <strong>Suite Type:</strong> {{ newSuiteType === 'StaticTestSuite' ? 'Static' : 'Requirement-Based' }}
+        </p>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="closeModal()" [disabled]="loading">
+        Cancel
+      </button>
+      <button
+        class="btn btn-primary"
+        (click)="submit()"
+        [disabled]="!canSubmit()">
+        {{ loading ? 'Exporting...' : 'Export Test Cases' }}
+      </button>
+    </div>
+  </div>
+</div>

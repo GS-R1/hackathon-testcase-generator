@@ -2,7 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { execSync, exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const azdev = require('azure-devops-node-api');
 const { WorkItemExpand } = require('azure-devops-node-api/interfaces/WorkItemTrackingInterfaces');
 const { BedrockRuntimeClient, InvokeModelCommand } = require('@aws-sdk/client-bedrock-runtime');
@@ -39,14 +41,57 @@ const AWS_REGION = process.env.AWS_REGION || 'us-east-1';
 const AWS_PROFILE = process.env.AWS_PROFILE || 'ai-tools-prod';
 const BEDROCK_MODEL_ID = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || 'us.anthropic.claude-opus-4-6-v1';
 
-// Helper function to get Azure CLI access token
-function getAzureToken() {
+// Azure token cache with TTL
+let azureTokenCache = {
+  token: null,
+  expiresAt: 0
+};
+
+// Helper function to get Azure CLI access token with caching
+async function getAzureToken() {
+  const now = Date.now();
+
+  // Return cached token if still valid (with 5min buffer before expiry)
+  if (azureTokenCache.token && azureTokenCache.expiresAt > now + 300000) {
+    console.log('✓ Using cached Azure token');
+    return azureTokenCache.token;
+  }
+
+  // Refresh token
+  try {
+    console.log('🔄 Fetching new Azure token...');
+    const { stdout } = await execAsync(
+      `az account get-access-token --resource ${AZURE_DEVOPS_RESOURCE_ID}`,
+      {
+        encoding: 'utf-8',
+        timeout: 10000
+      }
+    );
+    const tokenData = JSON.parse(stdout);
+    azureTokenCache.token = tokenData.accessToken;
+    azureTokenCache.expiresAt = now + 3600000; // 1 hour TTL
+    console.log('✓ Azure token cached');
+    return azureTokenCache.token;
+  } catch (error) {
+    throw new Error('Azure CLI not logged in. Please run "az login" first.');
+  }
+}
+
+// Synchronous version for backward compatibility (uses cache if available)
+function getAzureTokenSync() {
+  if (azureTokenCache.token && azureTokenCache.expiresAt > Date.now() + 300000) {
+    return azureTokenCache.token;
+  }
+
+  // Fallback to sync call if no cache
   try {
     const result = execSync(`az account get-access-token --resource ${AZURE_DEVOPS_RESOURCE_ID}`, {
       encoding: 'utf-8',
       timeout: 10000
     });
     const tokenData = JSON.parse(result);
+    azureTokenCache.token = tokenData.accessToken;
+    azureTokenCache.expiresAt = Date.now() + 3600000;
     return tokenData.accessToken;
   } catch (error) {
     throw new Error('Azure CLI not logged in. Please run "az login" first.');
@@ -103,6 +148,265 @@ function checkAzureCliAuth() {
   }
 }
 
+// ============================================================================
+// HELPER FUNCTIONS FOR TEST CASE EXPORT
+// ============================================================================
+
+/**
+ * Escape XML special characters for DevOps test steps
+ */
+function escapeXml(text) {
+  if (!text) return '';
+
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+    .replace(/\n/g, ' ') // Replace newlines with spaces
+    .replace(/\s+/g, ' ') // Collapse multiple spaces
+    .trim();
+}
+
+/**
+ * Generate DevOps test steps XML format
+ */
+function generateDevOpsStepsXml(steps) {
+  if (!steps || steps.length === 0) {
+    return '<steps id="0" last="0"></steps>';
+  }
+
+  const stepElements = steps.map((step, index) => {
+    const stepId = index + 1;
+    const action = escapeXml(step.action || 'No action specified');
+    const expected = escapeXml(step.expected || 'No expected result specified');
+
+    return `  <step id="${stepId}" type="ActionStep">
+    <parameterizedString isformatted="true">&lt;DIV&gt;&lt;P&gt;${action}&lt;/P&gt;&lt;/DIV&gt;</parameterizedString>
+    <parameterizedString isformatted="true">&lt;DIV&gt;&lt;P&gt;${expected}&lt;/P&gt;&lt;/DIV&gt;</parameterizedString>
+    <description/>
+  </step>`;
+  }).join('\n');
+
+  return `<steps id="0" last="${steps.length}">
+${stepElements}
+</steps>`;
+}
+
+/**
+ * Parse Given/When/Then format
+ */
+function parseGivenWhenThen(content) {
+  const steps = [];
+  let description = '';
+
+  // Extract Given (preconditions)
+  const givenMatch = content.match(/\*\*Given:\*\*\s*(.+?)(?=\n\*\*When:|\n\*\*Then:|$)/s);
+  const given = givenMatch ? givenMatch[1].trim() : '';
+
+  // Extract When (action)
+  const whenMatch = content.match(/\*\*When:\*\*\s*(.+?)(?=\n\*\*Then:|\n\*\*Given:|$)/s);
+  const when = whenMatch ? whenMatch[1].trim() : '';
+
+  // Extract Then (expected result)
+  const thenMatch = content.match(/\*\*Then:\*\*\s*(.+?)(?=\n\*\*When:|\n\*\*Given:|\n##|$)/s);
+  const then = thenMatch ? thenMatch[1].trim() : '';
+
+  // Extract any content before Given/When/Then as description
+  const descMatch = content.match(/^([\s\S]+?)(?=\*\*Given:|\*\*When:|\*\*Then:)/);
+  if (descMatch) {
+    description = descMatch[1].trim();
+  }
+
+  // Create steps
+  if (given) {
+    steps.push({
+      action: `Precondition: ${given}`,
+      expected: 'Setup complete'
+    });
+  }
+
+  if (when && then) {
+    steps.push({
+      action: when,
+      expected: then
+    });
+  } else if (when) {
+    steps.push({
+      action: when,
+      expected: 'See description'
+    });
+  }
+
+  return { steps, description };
+}
+
+/**
+ * Parse numbered or bulleted list format
+ */
+function parseListSteps(content) {
+  const steps = [];
+  let description = '';
+
+  // Extract any content before first list item as description
+  const descMatch = content.match(/^([\s\S]+?)(?=^\d+\.\s+|^[-*]\s+)/m);
+  if (descMatch) {
+    description = descMatch[1].trim();
+  }
+
+  // Match list items (numbered or bulleted)
+  const listItemRegex = /^(?:\d+\.|\-|\*)\s+(.+?)$/gm;
+  let match;
+
+  while ((match = listItemRegex.exec(content)) !== null) {
+    const itemText = match[1].trim();
+
+    // Try to split into action/expected if there's an indicator
+    const expectedIndicators = ['Expected:', 'Result:', 'Verify:', 'Should:', 'Then:'];
+    let action = itemText;
+    let expected = 'Verify step completes successfully';
+
+    for (const indicator of expectedIndicators) {
+      if (itemText.includes(indicator)) {
+        const parts = itemText.split(indicator);
+        action = parts[0].trim();
+        expected = parts[1].trim();
+        break;
+      }
+    }
+
+    steps.push({ action, expected });
+  }
+
+  return { steps, description };
+}
+
+/**
+ * Parse test case content into structured format
+ * Handles multiple content structures
+ */
+function parseTestCaseContent(content, testCaseId) {
+  // Try to detect format
+  const hasGivenWhenThen = content.includes('**Given:**') || content.includes('**When:**') || content.includes('**Then:**');
+  const hasNumberedSteps = /^\d+\.\s+/m.test(content);
+  const hasBulletSteps = /^[-*]\s+/m.test(content);
+
+  let steps = [];
+  let description = '';
+
+  if (hasGivenWhenThen) {
+    // Parse Given/When/Then format
+    const result = parseGivenWhenThen(content);
+    steps = result.steps;
+    description = result.description;
+  } else if (hasNumberedSteps || hasBulletSteps) {
+    // Parse list-based format
+    const result = parseListSteps(content);
+    steps = result.steps;
+    description = result.description;
+  } else {
+    // Freeform text - treat entire content as description with single step
+    description = content;
+    steps = [{
+      action: 'Execute test case as described',
+      expected: 'See description for expected results'
+    }];
+  }
+
+  // Convert to DevOps XML format
+  const stepsXml = generateDevOpsStepsXml(steps);
+
+  return {
+    description: description || `Test case ${testCaseId}`,
+    stepsXml: stepsXml
+  };
+}
+
+/**
+ * Parse test cases from markdown - FORMAT AGNOSTIC
+ *
+ * Works with:
+ * - Given/When/Then format
+ * - Numbered steps
+ * - Bulleted lists
+ * - Freeform text
+ * - Mixed formats
+ */
+function parseTestCasesFromMarkdown(markdown) {
+  const testCases = [];
+
+  // Match test case headers - flexible patterns
+  // Matches: "## TC-001: Title", "### TC-001: Title", "## Test Case 1: Title", etc.
+  const headerRegex = /^(#{2,3})\s+(TC-\d+|Test Case \d+):\s*(.+?)$/gm;
+
+  let matches = [];
+  let match;
+
+  // Find all test case headers and their positions
+  while ((match = headerRegex.exec(markdown)) !== null) {
+    matches.push({
+      fullMatch: match[0],
+      headerLevel: match[1],
+      id: match[2],
+      title: match[3].trim(),
+      startIndex: match.index,
+      endIndex: match.index + match[0].length
+    });
+  }
+
+  if (matches.length === 0) {
+    console.warn('No test case headers found. Expected format: ## TC-001: Title');
+    return [];
+  }
+
+  // Extract content between headers
+  for (let i = 0; i < matches.length; i++) {
+    const current = matches[i];
+    const next = matches[i + 1];
+
+    // Content is from end of current header to start of next header (or end of string)
+    const contentStart = current.endIndex;
+    const contentEnd = next ? next.startIndex : markdown.length;
+    const rawContent = markdown.substring(contentStart, contentEnd).trim();
+
+    if (!rawContent) {
+      console.warn(`Test case ${current.id} has no content, skipping`);
+      continue;
+    }
+
+    // Parse content into structured format
+    const parsedContent = parseTestCaseContent(rawContent, current.id);
+
+    testCases.push({
+      id: current.id,
+      title: `${current.id}: ${current.title}`,
+      description: parsedContent.description,
+      steps: parsedContent.stepsXml,
+      rawContent: rawContent // Preserve for debugging
+    });
+  }
+
+  console.log(`Parsed ${testCases.length} test case(s) from markdown`);
+  return testCases;
+}
+
+/**
+ * Helper to flatten classification node tree (area paths, iterations)
+ */
+function flattenClassificationTree(node, prefix = '') {
+  const currentPath = prefix ? `${prefix}\\${node.name}` : node.name;
+  let paths = [currentPath];
+
+  if (node.children && node.children.length > 0) {
+    node.children.forEach(child => {
+      paths = paths.concat(flattenClassificationTree(child, currentPath));
+    });
+  }
+
+  return paths;
+}
+
 // API Routes
 
 // Get settings/status
@@ -138,17 +442,25 @@ app.get('/api/workitem/:id', async (req, res) => {
       });
     }
 
-    const token = getAzureToken();
+    const token = await getAzureToken();
     const authHandler = azdev.getBearerHandler(token);
     const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
     const witApi = await connection.getWorkItemTrackingApi(project);
 
     // getWorkItem(id, fields, asOf, expand)
+    // Only fetch fields we actually use (performance optimization)
     const workItem = await witApi.getWorkItem(
       workItemId,
-      [], // fields - empty array to get all fields
+      [
+        'System.Title',
+        'System.Description',
+        'Microsoft.VSTS.Common.AcceptanceCriteria',
+        'System.State',
+        'System.WorkItemType',
+        'System.AssignedTo'
+      ],
       undefined, // asOf
-      WorkItemExpand.All // expand
+      WorkItemExpand.None // Don't expand relations/links (performance optimization)
     );
 
     // Validate the work item response
@@ -278,12 +590,29 @@ app.get('/api/workitem/:id', async (req, res) => {
 // Analyze with Claude
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { data, analysisType, userFeedback, previousTestCases, additionalContext, generateAll } = req.body;
+    const { data, analysisType, userFeedback, previousTestCases, additionalContext } = req.body;
+
+    // Set up SSE headers for streaming progress
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable buffering in nginx
+
+    // Helper function to send SSE messages
+    const sendProgress = (message) => {
+      res.write(`data: ${JSON.stringify({ type: 'progress', message })}\n\n`);
+      console.log(`  📤 Sent progress: ${message}`);
+    };
 
     console.log('');
     console.log('============================================');
     console.log(`  Starting Analysis: ${analysisType}`);
     console.log('============================================');
+
+    // Build request context once to avoid duplicate loading
+    console.time('⏱️  Request Context Load');
+    const requestContext = buildRequestContext();
+    console.timeEnd('⏱️  Request Context Load');
 
     if (analysisType === 'testCases') {
       // Log additional context if provided
@@ -294,40 +623,39 @@ app.post('/api/analyze', async (req, res) => {
         console.log('ℹ No additional context provided from PBI Quality Assessment');
       }
 
-      // Log generation mode
-      if (generateAll) {
-        console.log('📋 Generating ALL test cases (comprehensive mode)');
-      } else {
-        console.log('📋 Generating Happy Path + Top 5 Critical tests (focused mode)');
-      }
-
       // If user provided feedback, use direct improvement flow
       if (userFeedback && previousTestCases) {
         console.log('🔄 User Feedback Mode - Improving existing test cases...');
         console.log(`   Feedback: "${userFeedback.substring(0, 100)}${userFeedback.length > 100 ? '...' : ''}"`);
-        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback, additionalContext);
+        sendProgress('Regenerating with feedback');
+        const result = await improveTestCasesWithFeedback(data, previousTestCases, userFeedback, additionalContext, sendProgress, requestContext);
 
-        res.json({
+        res.write(`data: ${JSON.stringify({
+          type: 'complete',
           success: true,
           data: result.testCases,
           qualityScore: result.qualityScore,
-          iterations: 1 // Single improvement iteration
-        });
+          iterations: 1
+        })}\n\n`);
+        res.end();
       } else {
         // Use iterative quality generation for initial test cases
-        const result = await generateTestCasesWithQuality(data, additionalContext, generateAll);
+        const result = await generateTestCasesWithQuality(data, additionalContext, sendProgress, requestContext);
 
-        res.json({
+        res.write(`data: ${JSON.stringify({
+          type: 'complete',
           success: true,
           data: result.testCases,
           qualityScore: result.qualityScore,
           iterations: result.iterations
-        });
+        })}\n\n`);
+        res.end();
       }
     } else if (analysisType === 'pbiQualityAssessment') {
       // PBI Quality Assessment using specialized assessor
       console.log('📊 Using PBI Quality Assessor with rich system prompt and examples...');
-      const assessor = new PBIQualityAssessor();
+      sendProgress('Analyzing PBI quality');
+      const assessor = new PBIQualityAssessor(requestContext);
       const payload = assessor.buildBedrockPayload(data);
 
       const client = getBedrockClient();
@@ -347,25 +675,31 @@ app.post('/api/analyze', async (req, res) => {
       console.log('============================================');
       console.log('');
 
-      res.json({
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
         success: true,
         data: result
-      });
+      })}\n\n`);
+      res.end();
     } else {
       // Other analysis types use simple generation
       let prompt = '';
+      let progressMsg = '';
       switch (analysisType) {
         case 'impactAnalysis':
           prompt = buildImpactAnalysisPrompt(data);
+          progressMsg = 'Analyzing impact';
           break;
         case 'documentation':
           prompt = buildDocumentationPrompt(data);
+          progressMsg = 'Generating documentation';
           break;
         default:
           throw new Error(`Unknown analysis type: ${analysisType}`);
       }
 
       console.log(`🤖 Calling Claude via AWS Bedrock (${BEDROCK_MODEL_ID})...`);
+      sendProgress(progressMsg);
 
       const result = await invokeClaudeOnBedrock(prompt);
 
@@ -373,15 +707,449 @@ app.post('/api/analyze', async (req, res) => {
       console.log('============================================');
       console.log('');
 
-      res.json({
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
         success: true,
         data: result
-      });
+      })}\n\n`);
+      res.end();
     }
   } catch (error) {
     console.error('Error in Claude analysis:', error);
     console.error('Error stack:', error.stack);
-    res.status(500).json({ success: false, error: error.message, details: error.toString() });
+    res.write(`data: ${JSON.stringify({
+      type: 'error',
+      success: false,
+      error: error.message,
+      details: error.toString()
+    })}\n\n`);
+    res.end();
+  }
+});
+
+// ============================================================================
+// AZURE DEVOPS TEST PLANS API ENDPOINTS
+// ============================================================================
+
+/**
+ * GET /api/project-info - Get project structure (area paths, iterations)
+ * Used to populate dropdowns for creating new test plans
+ */
+app.get('/api/project-info', async (req, res) => {
+  try {
+    const { project } = req.query;
+    const projectName = project || DEFAULT_PROJECT;
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const witApi = await connection.getWorkItemTrackingApi();
+    const coreApi = await connection.getCoreApi();
+
+    // Get project details
+    const projectDetails = await coreApi.getProject(projectName);
+
+    // Get area paths - with fallback
+    let areaPaths = [projectName];
+    try {
+      const areaTree = await witApi.getClassificationNode(
+        projectName,
+        'Areas',
+        undefined,
+        10 // depth
+      );
+      areaPaths = flattenClassificationTree(areaTree);
+    } catch (areaError) {
+      console.warn('Could not fetch area paths, using default:', areaError.message);
+    }
+
+    // Get iteration paths - with fallback
+    let iterationPaths = [projectName];
+    try {
+      const iterationTree = await witApi.getClassificationNode(
+        projectName,
+        'Iterations',
+        undefined,
+        10 // depth
+      );
+      iterationPaths = flattenClassificationTree(iterationTree);
+    } catch (iterationError) {
+      console.warn('Could not fetch iteration paths, using default:', iterationError.message);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        projectName: projectDetails.name,
+        areaPaths: areaPaths,
+        iterationPaths: iterationPaths,
+        defaultAreaPath: projectName,
+        defaultIteration: projectName
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching project info:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/test-plans - Get all test plans for a project
+ */
+app.get('/api/test-plans', async (req, res) => {
+  try {
+    const { project } = req.query;
+    const projectName = project || DEFAULT_PROJECT;
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const testPlanApi = await connection.getTestPlanApi();
+
+    const testPlans = await testPlanApi.getTestPlans(projectName);
+
+    res.json({
+      success: true,
+      data: testPlans.map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        state: plan.state,
+        iteration: plan.iteration,
+        areaPath: plan.areaPath,
+        rootSuite: plan.rootSuite ? {
+          id: plan.rootSuite.id,
+          name: plan.rootSuite.name
+        } : null
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching test plans:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/test-suites - Get test suites for a test plan
+ */
+app.get('/api/test-suites', async (req, res) => {
+  try {
+    const { project, planId } = req.query;
+    const projectName = project || DEFAULT_PROJECT;
+
+    if (!planId) {
+      return res.status(400).json({
+        success: false,
+        error: 'planId is required'
+      });
+    }
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const testPlanApi = await connection.getTestPlanApi();
+
+    // Get test plan to find root suite
+    const plan = await testPlanApi.getTestPlanById(projectName, parseInt(planId));
+
+    // Get all suites for the plan
+    const suites = await testPlanApi.getTestSuitesForPlan(projectName, parseInt(planId));
+
+    res.json({
+      success: true,
+      data: {
+        rootSuiteId: plan.rootSuite?.id,
+        suites: suites.map(suite => ({
+          id: suite.id,
+          name: suite.name,
+          suiteType: suite.suiteType,
+          parentSuiteId: suite.parentSuite?.id,
+          isRoot: suite.id === plan.rootSuite?.id
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching test suites:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/test-plans - Create a new test plan
+ */
+app.post('/api/test-plans', async (req, res) => {
+  try {
+    const { project, name, areaPath, iteration } = req.body;
+    const projectName = project || DEFAULT_PROJECT;
+
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: 'Test plan name is required'
+      });
+    }
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const testPlanApi = await connection.getTestPlanApi();
+
+    // Use provided paths or fallback to project name
+    const testPlanParams = {
+      name: name,
+      areaPath: areaPath || projectName,
+      iteration: iteration || projectName
+    };
+
+    console.log('Creating test plan:', testPlanParams);
+
+    const newPlan = await testPlanApi.createTestPlan(testPlanParams, projectName);
+
+    res.json({
+      success: true,
+      data: {
+        id: newPlan.id,
+        name: newPlan.name,
+        rootSuite: {
+          id: newPlan.rootSuite.id,
+          name: newPlan.rootSuite.name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error creating test plan:', error);
+
+    // Better error messages
+    let errorMessage = error.message;
+    if (error.message.includes('area path')) {
+      errorMessage = 'Invalid area path. Please select a valid area path from the dropdown.';
+    } else if (error.message.includes('iteration')) {
+      errorMessage = 'Invalid iteration path. Please select a valid iteration from the dropdown.';
+    }
+
+    res.status(500).json({
+      success: false,
+      error: errorMessage
+    });
+  }
+});
+
+/**
+ * POST /api/test-suites - Create a new test suite
+ */
+app.post('/api/test-suites', async (req, res) => {
+  try {
+    const { project, planId, name, suiteType, parentSuiteId, requirementId } = req.body;
+    const projectName = project || DEFAULT_PROJECT;
+
+    if (!planId || !name) {
+      return res.status(400).json({
+        success: false,
+        error: 'planId and name are required'
+      });
+    }
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const testPlanApi = await connection.getTestPlanApi();
+
+    // If no parent suite provided, get the root suite of the plan
+    let actualParentSuiteId = parentSuiteId;
+    if (!actualParentSuiteId) {
+      const plan = await testPlanApi.getTestPlanById(projectName, parseInt(planId));
+      if (!plan.rootSuite || !plan.rootSuite.id) {
+        throw new Error('Could not determine root suite for test plan');
+      }
+      actualParentSuiteId = plan.rootSuite.id;
+      console.log(`Using root suite ${actualParentSuiteId} as parent for new suite`);
+    }
+
+    const suiteParams = {
+      name: name,
+      suiteType: suiteType || 'StaticTestSuite',
+      parentSuite: { id: actualParentSuiteId }
+    };
+
+    // For requirement-based suites
+    if (suiteType === 'RequirementTestSuite') {
+      if (!requirementId) {
+        return res.status(400).json({
+          success: false,
+          error: 'requirementId is required for requirement-based test suites'
+        });
+      }
+      suiteParams.requirementId = requirementId;
+    }
+
+    console.log('Creating test suite:', suiteParams);
+
+    const newSuite = await testPlanApi.createTestSuite(
+      suiteParams,
+      projectName,
+      parseInt(planId)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        id: newSuite.id,
+        name: newSuite.name,
+        suiteType: newSuite.suiteType,
+        parentSuiteId: actualParentSuiteId
+      }
+    });
+  } catch (error) {
+    console.error('Error creating test suite:', error);
+
+    let errorMessage = error.message;
+    if (error.message.includes('requirement')) {
+      errorMessage = 'Invalid requirement ID. Please ensure the work item exists and is a valid requirement type (PBI, User Story, or Requirement).';
+    }
+
+    res.status(500).json({
+      success: false,
+      error: errorMessage
+    });
+  }
+});
+
+/**
+ * POST /api/export-test-cases - Export generated test cases to DevOps
+ */
+app.post('/api/export-test-cases', async (req, res) => {
+  try {
+    const { project, planId, suiteId, testCasesMarkdown, pbiId } = req.body;
+    const projectName = project || DEFAULT_PROJECT;
+
+    if (!planId || !suiteId || !testCasesMarkdown) {
+      return res.status(400).json({
+        success: false,
+        error: 'planId, suiteId, and testCasesMarkdown are required'
+      });
+    }
+
+    const token = await getAzureToken();
+    const authHandler = azdev.getBearerHandler(token);
+    const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
+    const witApi = await connection.getWorkItemTrackingApi();
+    const testPlanApi = await connection.getTestPlanApi();
+
+    // Parse test cases using flexible, format-agnostic parser
+    console.log('Parsing test cases from markdown...');
+    const testCases = parseTestCasesFromMarkdown(testCasesMarkdown);
+
+    if (testCases.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No test cases found in markdown. Expected format: ## TC-001: Title'
+      });
+    }
+
+    console.log(`Found ${testCases.length} test case(s) to export`);
+
+    const createdTestCases = [];
+    const errors = [];
+
+    // Create each test case
+    for (const testCase of testCases) {
+      try {
+        console.log(`Creating test case: ${testCase.title}`);
+
+        // Create test case work item
+        const document = [
+          {
+            op: 'add',
+            path: '/fields/System.Title',
+            value: testCase.title
+          },
+          {
+            op: 'add',
+            path: '/fields/Microsoft.VSTS.TCM.Steps',
+            value: testCase.steps
+          },
+          {
+            op: 'add',
+            path: '/fields/System.Description',
+            value: testCase.description || ''
+          }
+        ];
+
+        // Link to PBI if provided
+        if (pbiId) {
+          document.push({
+            op: 'add',
+            path: '/relations/-',
+            value: {
+              rel: 'Microsoft.VSTS.Common.TestedBy-Reverse',
+              url: `${DEFAULT_ORG}/${projectName}/_apis/wit/workItems/${pbiId}`,
+              attributes: {
+                comment: 'Tests'
+              }
+            }
+          });
+        }
+
+        const workItem = await witApi.createWorkItem(
+          null,
+          document,
+          projectName,
+          'Test Case'
+        );
+
+        // Add test case to suite
+        await testPlanApi.addTestCasesToSuite(
+          projectName,
+          parseInt(planId),
+          parseInt(suiteId),
+          [workItem.id]
+        );
+
+        createdTestCases.push({
+          id: workItem.id,
+          title: testCase.title
+        });
+
+        console.log(`✓ Created test case ${workItem.id}: ${testCase.title}`);
+      } catch (testCaseError) {
+        console.error(`✗ Failed to create test case ${testCase.title}:`, testCaseError.message);
+        errors.push({
+          title: testCase.title,
+          error: testCaseError.message
+        });
+      }
+    }
+
+    // Return results even if some failed
+    const response = {
+      success: createdTestCases.length > 0,
+      data: {
+        testCasesCreated: createdTestCases.length,
+        testCasesFailed: errors.length,
+        testCases: createdTestCases
+      }
+    };
+
+    if (errors.length > 0) {
+      response.data.errors = errors;
+      response.message = `Created ${createdTestCases.length} test case(s), ${errors.length} failed`;
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error exporting test cases:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
@@ -625,15 +1393,27 @@ function loadKnowledgeBase() {
   }
 }
 
+// Build request-scoped context to avoid duplicate loading
+function buildRequestContext() {
+  return {
+    knowledge: loadKnowledgeBase(),
+    examples: loadExamples(),
+    standaloneExamples: loadStandaloneTestCaseExamples(),
+    definitionOfDone: loadDefinitionOfDone(),
+    knowledgeContext: null // Built once, reused
+  };
+}
+
 // Prompt builders
-function buildTestCasesPrompt(data, additionalContext, generateAll = false) {
+function buildTestCasesPrompt(data, additionalContext, requestContext = null) {
   console.log('');
   console.log('🧠 Building test case generation prompt...');
   console.log('--------------------------------------------');
 
-  const knowledge = loadKnowledgeBase();
-  const examples = loadExamples();
-  const standaloneExamples = loadStandaloneTestCaseExamples();
+  // Use provided context or load fresh (fallback for standalone use)
+  const knowledge = requestContext?.knowledge || loadKnowledgeBase();
+  const examples = requestContext?.examples || loadExamples();
+  const standaloneExamples = requestContext?.standaloneExamples || loadStandaloneTestCaseExamples();
 
   let knowledgeContext = '';
   if (knowledge) {
@@ -778,109 +1558,96 @@ ${additionalContext}
 
 ## Requirements
 
-Generate a **FOCUSED MANUAL TEST PLAN** with the following structure:
+Generate a comprehensive **MANUAL TEST PLAN** that includes:
 
-${generateAll ? `
-### COMPREHENSIVE TEST GENERATION MODE
+**IMPORTANT: The very first test case (Test Case #1) MUST be the Happy Path scenario - the ideal, successful user journey with valid inputs and expected successful outcomes.**
 
-Generate ALL test cases covering:
-- Happy Path (TC-001)
-- All critical tests
-- Additional acceptance criteria tests
-- Edge cases and boundary tests
-- Negative test cases
-- UAT scenarios
-- Cross-browser testing
-- Accessibility testing
-- Performance and usability checks
-- Security testing
-- Exploratory testing suggestions
+1. **Happy Path Test (TEST CASE #1 - MANDATORY)**
+   - This MUST be the first test case in your test plan
+   - Cover the primary, successful user journey
+   - Use valid data and expected inputs
+   - Verify all steps complete successfully
+   - Format in Given/When/Then structure
+   - Include clear step-by-step instructions
+   - Specify expected successful results
 
-Provide full detail for each test case.
-` : `
-### FOCUSED TEST GENERATION MODE - Generate ONLY 6 Test Cases
+2. **Additional Acceptance Criteria Tests** (Given/When/Then format)
+   - Cover all remaining acceptance criteria from the PBI
+   - Include variations and alternative paths
+   - Provide clear step-by-step instructions
+   - Specify expected results for each test
 
-**YOU ARE GENERATING A FOCUSED TEST PLAN WITH EXACTLY 6 TEST CASES. NO MORE, NO LESS.**
+3. **Functional Test Scenarios**
+   - Core functionality tests
+   - User workflows and journeys
+   - UI interactions and navigation
+   - Data input and validation
+   - Form submissions
+   - Search and filtering functionality
 
-**List of test cases you will generate:**
-1. TC-001 (Happy Path)
-2. TC-002 (Critical Test #1)
-3. TC-003 (Critical Test #2)
-4. TC-004 (Critical Test #3)
-5. TC-005 (Critical Test #4)
-6. TC-006 (Critical Test #5)
+4. **Edge Cases and Boundary Tests**
+   - Boundary values (minimum/maximum)
+   - Empty/null data scenarios
+   - Special characters and unusual inputs
+   - Large data sets
+   - Concurrent user scenarios (if applicable)
 
-**AFTER TC-006, YOUR RESPONSE MUST END. DO NOT CONTINUE.**
+5. **Negative Test Cases**
+   - Invalid inputs
+   - Incorrect data formats
+   - Unauthorized access attempts
+   - Error message validation
+   - System behavior under failure conditions
 
----
+6. **User Acceptance Testing (UAT) Scenarios**
+   - Real-world user scenarios
+   - Business process validation
+   - End-to-end user journeys
 
-**TC-001: Happy Path Test (MANDATORY FIRST TEST)**
-- This MUST be the first test case
-- Cover the primary, successful user journey with valid inputs
-- Format in Given/When/Then structure
-- Include: Test Scenario, Priority, Preconditions, Test Steps, Test Data, Expected Result, Notes
+7. **Cross-Browser Testing**
+   - Chrome (primary browser)
+   - Edge, Firefox, Safari (sanity checks)
+   - Responsive design on different screen sizes
+   - Mobile device testing (if applicable)
 
-**TC-002 through TC-006: The 5 Most Critical Tests**
-- Identify the 5 MOST CRITICAL tests needed to validate this PBI
-- Prioritize based on:
-  * Risk to business operations
-  * Impact if functionality fails
-  * Coverage of key acceptance criteria
-  * Security/data integrity concerns
-- For EACH of these 5 tests, provide full detail: Test Scenario, Priority, Preconditions, Test Steps, Test Data, Expected Result, Notes
+8. **Accessibility Testing** (Manual checks)
+   - Keyboard navigation (Tab, Enter, Escape)
+   - Screen reader compatibility testing
+   - Color contrast verification
+   - Focus indicators visibility
+   - Alt text for images
 
----
+9. **Performance and Usability**
+   - Page load time observations
+   - Response time for actions
+   - UI responsiveness
+   - Error handling and user feedback
 
-**CRITICAL CONSTRAINTS:**
+10. **Security Testing** (Manual verification)
+    - Authentication and authorization checks
+    - Data validation
+    - Session management
+    - Sensitive data handling
 
-❌ **DO NOT generate TC-007**
-❌ **DO NOT generate TC-008**
-❌ **DO NOT generate TC-009**
-❌ **DO NOT generate TC-010**
-❌ **DO NOT generate TC-011**
-❌ **DO NOT generate TC-012 or higher**
-❌ **DO NOT add a "Part 2" or "Additional Tests" section**
-❌ **DO NOT add summary test suggestions**
-❌ **DO NOT list additional recommended tests**
-
-✅ **END YOUR RESPONSE IMMEDIATELY AFTER TC-006**
-
-The user will request additional tests separately if needed. Your task is to generate ONLY the 6 most important tests.
-`}
+11. **Exploratory Testing Suggestions**
+    - Areas to explore freely
+    - Potential risk areas
+    - Integration points to verify
 
 ## Test Case Format
 
-${generateAll ? `
-For ALL test cases, provide:
-- **Test Case ID**: Unique identifier (TC-001, TC-002, etc.)
+For each test case, provide:
+- **Test Case ID**: Unique identifier (e.g., TC-001, TC-002, etc.)
 - **Test Scenario**: Brief description
-- **Priority**: Critical/High/Medium/Low
 - **Preconditions**: What must be set up or true before testing
-- **Test Steps**: Numbered, clear, step-by-step instructions in Given/When/Then format
+- **Test Steps**: Numbered, clear, step-by-step instructions
 - **Test Data**: Specific data values to use
 - **Expected Result**: What should happen
 - **Notes**: Any additional context or considerations
 
-**REMINDER**: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.
-` : `
-For EACH of the 6 test cases (TC-001, TC-002, TC-003, TC-004, TC-005, TC-006), provide:
-- **Test Case ID**: TC-001, TC-002, TC-003, TC-004, TC-005, or TC-006 ONLY
-- **Test Scenario**: Brief description
-- **Priority**: Critical/High/Medium/Low
-- **Preconditions**: What must be set up or true before testing
-- **Test Steps**: Numbered, clear, step-by-step instructions in Given/When/Then format
-- **Test Data**: Specific data values to use
-- **Expected Result**: What should happen
-- **Notes**: Any additional context or considerations
+**REMINDER: Test Case #1 (TC-001) MUST be the Happy Path - the successful, ideal scenario with valid inputs.**
 
-**FINAL REMINDER:**
-- TC-001 MUST be the Happy Path
-- Generate exactly 6 tests total
-- After completing TC-006, END your response immediately
-- Do NOT number tests beyond TC-006
-`}
-
-Format the response as markdown with clear headings. Make the detailed test cases easy for a manual tester to execute immediately.`;
+Format the response as a structured, detailed manual test plan organized by category. Use markdown formatting with clear headings, numbered steps, and bullet points. Make it easy for a manual tester to execute.`;
 }
 
 function buildImpactAnalysisPrompt(data) {
@@ -914,8 +1681,8 @@ Use clear, professional language suitable for different audiences.`;
 }
 
 // Self-Review and Quality Functions
-function buildSelfReviewPrompt(testCases, definitionOfDone, knowledgeContext, examples) {
-  const standaloneExamples = loadStandaloneTestCaseExamples();
+function buildSelfReviewPrompt(testCases, definitionOfDone, knowledgeContext, examples, requestContext = null) {
+  const standaloneExamples = requestContext?.standaloneExamples || loadStandaloneTestCaseExamples();
 
   const dodContext = definitionOfDone.length > 0 ? `
 # Definition of Done Criteria
@@ -1069,13 +1836,14 @@ Provide your assessment in this EXACT format:
 Keep your response concise and focused.`;
 }
 
-async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext) {
-  const knowledge = loadKnowledgeBase();
-  const standaloneExamples = loadStandaloneTestCaseExamples();
-  const definitionOfDone = loadDefinitionOfDone();
+async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext, progressCallback = null, requestContext = null) {
+  const knowledge = requestContext?.knowledge || loadKnowledgeBase();
+  const standaloneExamples = requestContext?.standaloneExamples || loadStandaloneTestCaseExamples();
+  const definitionOfDone = requestContext?.definitionOfDone || loadDefinitionOfDone();
 
   console.log('');
   console.log('--------------------------------------------');
+  if (progressCallback) progressCallback('Applying feedback');
 
   // Build knowledge context
   let knowledgeContext = '';
@@ -1162,6 +1930,7 @@ Generate IMPROVED test cases that address the user's feedback while maintaining 
 Generate the complete improved test plan now.`;
 
   console.log('🤖 Calling Claude to improve test cases with user feedback...');
+  if (progressCallback) progressCallback('Regenerating with feedback');
   const improvedTestCases = await invokeClaudeOnBedrock(improvementPrompt);
   console.log('✓ Improved test cases generated');
 
@@ -1169,11 +1938,13 @@ Generate the complete improved test plan now.`;
   let qualityScore = null;
   if (definitionOfDone.length > 0) {
     console.log('📊 Generating quality score...');
+    if (progressCallback) progressCallback('Generating quality score');
     const scoringPrompt = buildQualityScoringPrompt(improvedTestCases, definitionOfDone);
     qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
     console.log('✓ Quality score generated');
   }
 
+  if (progressCallback) progressCallback('Complete');
   console.log('============================================');
   console.log('');
 
@@ -1183,16 +1954,17 @@ Generate the complete improved test plan now.`;
   };
 }
 
-async function generateTestCasesWithQuality(pbiData, additionalContext, generateAll = false) {
+async function generateTestCasesWithQuality(pbiData, additionalContext, progressCallback = null, requestContext = null) {
   const MAX_ITERATIONS = 3;
-  const knowledge = loadKnowledgeBase();
-  const examples = loadExamples();
-  const standaloneExamples = loadStandaloneTestCaseExamples();
-  const definitionOfDone = loadDefinitionOfDone();
+  const knowledge = requestContext?.knowledge || loadKnowledgeBase();
+  const examples = requestContext?.examples || loadExamples();
+  const standaloneExamples = requestContext?.standaloneExamples || loadStandaloneTestCaseExamples();
+  const definitionOfDone = requestContext?.definitionOfDone || loadDefinitionOfDone();
 
   console.log('');
   console.log('🔄 Starting Iterative Test Generation with Quality Review...');
   console.log('--------------------------------------------');
+  if (progressCallback) progressCallback('Starting tests generation');
 
   // Build knowledge context once
   let knowledgeContext = '';
@@ -1263,12 +2035,14 @@ ${standaloneExamples.good}
     if (iteration === 1) {
       // First generation
       console.log('  → Generating initial test cases...');
-      const initialPrompt = buildTestCasesPrompt(pbiData, additionalContext, generateAll);
+      if (progressCallback) progressCallback('Initial tests generating');
+      const initialPrompt = buildTestCasesPrompt(pbiData, additionalContext, requestContext);
       currentTestCases = await invokeClaudeOnBedrock(initialPrompt);
       console.log('  ✓ Initial test cases generated');
     } else {
       // Improvement iteration
       console.log('  → Generating improved test cases based on review...');
+      if (progressCallback) progressCallback(`Iteration ${iteration - 1}`);
       const improvementPrompt = buildImprovedTestCasesPrompt(
         currentTestCases,
         lastReview,
@@ -1287,8 +2061,9 @@ ${standaloneExamples.good}
       } else {
         console.log('  → Performing self-review against knowledge base, examples, and general quality standards...');
       }
+      if (progressCallback) progressCallback('Reviewing test cases');
 
-      const reviewPrompt = buildSelfReviewPrompt(currentTestCases, definitionOfDone, knowledgeContext, examples);
+      const reviewPrompt = buildSelfReviewPrompt(currentTestCases, definitionOfDone, knowledgeContext, examples, requestContext);
       lastReview = await invokeClaudeOnBedrock(reviewPrompt);
       console.log('  ✓ Self-review complete');
 
@@ -1298,6 +2073,7 @@ ${standaloneExamples.good}
 
       if (isReadyForUse) {
         console.log('  ✅ Test cases meet quality standards!');
+        if (progressCallback) progressCallback('Test cases approved');
       } else {
         console.log('  ⚠ Issues found - will iterate');
       }
@@ -1305,6 +2081,7 @@ ${standaloneExamples.good}
       // Last iteration - accept the output
       isReadyForUse = true;
       console.log('  ℹ Maximum iterations reached - accepting current version');
+      if (progressCallback) progressCallback('Final iteration');
     }
   }
 
@@ -1312,9 +2089,11 @@ ${standaloneExamples.good}
 
   // Generate quality score
   console.log('📊 Generating quality score...');
+  if (progressCallback) progressCallback('Generating quality score');
   const scoringPrompt = buildQualityScoringPrompt(currentTestCases, definitionOfDone);
   const qualityScore = await invokeClaudeOnBedrock(scoringPrompt);
   console.log('✓ Quality score generated');
+  if (progressCallback) progressCallback('Complete');
 
   console.log('============================================');
   console.log('');
