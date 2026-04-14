@@ -343,6 +343,48 @@ function loadExamples() {
   }
 }
 
+// Standalone Test Case Examples Cache
+let standaloneExamplesCache = null;
+
+function loadStandaloneTestCaseExamples() {
+  if (standaloneExamplesCache !== null) {
+    return standaloneExamplesCache;
+  }
+
+  const standaloneExamples = {
+    good: null,
+    bad: null
+  };
+
+  const testCasesPath = path.join(__dirname, 'knowledge/examples/test-cases');
+
+  try {
+    const goodPath = path.join(testCasesPath, 'good-test-cases.md');
+    const badPath = path.join(testCasesPath, 'bad-test-cases.md');
+
+    if (fs.existsSync(goodPath)) {
+      standaloneExamples.good = fs.readFileSync(goodPath, 'utf-8');
+      console.log(`✓ Loaded good test case examples (${(standaloneExamples.good.length / 1024).toFixed(1)} KB)`);
+    }
+
+    if (fs.existsSync(badPath)) {
+      standaloneExamples.bad = fs.readFileSync(badPath, 'utf-8');
+      console.log(`✓ Loaded bad test case examples (${(standaloneExamples.bad.length / 1024).toFixed(1)} KB)`);
+    }
+
+    if (!standaloneExamples.good && !standaloneExamples.bad) {
+      console.log('ℹ No standalone test case examples found');
+    }
+
+    standaloneExamplesCache = standaloneExamples;
+    return standaloneExamplesCache;
+  } catch (error) {
+    console.error('✗ Error loading standalone test case examples:', error.message);
+    standaloneExamplesCache = { good: null, bad: null };
+    return standaloneExamplesCache;
+  }
+}
+
 // Definition of Done Cache
 let definitionOfDoneCache = null;
 
@@ -458,6 +500,7 @@ function buildTestCasesPrompt(data, additionalContext) {
 
   const knowledge = loadKnowledgeBase();
   const examples = loadExamples();
+  const standaloneExamples = loadStandaloneTestCaseExamples();
 
   let knowledgeContext = '';
   if (knowledge) {
@@ -472,14 +515,26 @@ function buildTestCasesPrompt(data, additionalContext) {
 
     if (examples.length > 0) {
       console.log('');
-      console.log('📋 Using Example Test Cases:');
+      console.log('📋 Using Example PBI/Test Case Pairs:');
       examples.forEach((example, index) => {
         console.log(`  ${index + 1}. ${example.name}`);
       });
       console.log('  → Claude will learn from these examples');
     } else {
       console.log('');
-      console.log('ℹ No examples provided - generating without reference examples');
+      console.log('ℹ No PBI/test case pairs found');
+    }
+
+    if (standaloneExamples.good || standaloneExamples.bad) {
+      console.log('');
+      console.log('✅ Using Standalone Test Case Examples:');
+      if (standaloneExamples.good) {
+        console.log('  ✓ Good test case examples (what TO do)');
+      }
+      if (standaloneExamples.bad) {
+        console.log('  ✓ Bad test case examples (what NOT to do)');
+      }
+      console.log('  → Claude will learn quality standards from these');
     }
 
     console.log('--------------------------------------------');
@@ -521,9 +576,48 @@ ${example.testCases}
 `).join('\n')}
 
 ` : ''}
+${standaloneExamples.good || standaloneExamples.bad ? `
+# QUALITY EXAMPLES: Learn What Makes Good vs. Bad Test Cases
+
+${standaloneExamples.bad ? `
+## ❌ BAD TEST CASES (What NOT to Do)
+
+The following examples demonstrate POOR test case quality. These are real examples of badly-written test cases that you should AVOID:
+
+${standaloneExamples.bad}
+
+**Problems with the above examples:**
+- Vague or unclear language (e.g., "Evoke validation")
+- Missing Given/When/Then structure
+- Inconsistent test case numbering
+- Missing preconditions and test scenarios
+- Undefined terms or references without context
+- No clear description of what's being tested
+
+` : ''}
+${standaloneExamples.good ? `
+## ✅ GOOD TEST CASES (What TO Do)
+
+The following examples demonstrate HIGH-QUALITY test cases. Use these as your standard:
+
+${standaloneExamples.good}
+
+**Why these examples are excellent:**
+- Clear Given/When/Then format throughout
+- Specific preconditions stated upfront
+- Detailed test scenario descriptions
+- Precise language (URLs, dates, validation messages)
+- Logical step-by-step flow
+- Helpful notes where needed
+- Each step has clear expected results
+
+` : ''}
+**YOUR GOAL**: Generate test cases that match the GOOD examples and avoid the mistakes shown in the BAD examples.
+
+` : ''}
 # YOUR TASK
 
-Now, using the standards, context${examples.length > 0 ? ', and examples' : ''} above, analyze the following Product Backlog Item (PBI) and generate comprehensive test cases${examples.length > 0 ? ' in the same high-quality format as the examples' : ''}.
+Now, using the standards, context${examples.length > 0 || standaloneExamples.good || standaloneExamples.bad ? ', and examples' : ''} above, analyze the following Product Backlog Item (PBI) and generate comprehensive test cases in the same high-quality format as the good examples.
 `;
   } else {
     console.log('⚠ Warning: Knowledge base not loaded - generating without GL context');
@@ -675,6 +769,8 @@ Use clear, professional language suitable for different audiences.`;
 
 // Self-Review and Quality Functions
 function buildSelfReviewPrompt(testCases, definitionOfDone, knowledgeContext, examples) {
+  const standaloneExamples = loadStandaloneTestCaseExamples();
+
   const dodContext = definitionOfDone.length > 0 ? `
 # Definition of Done Criteria
 
@@ -701,11 +797,31 @@ ${example.testCases}
 `).join('\n')}
 ` : '';
 
+  const qualityExamplesContext = standaloneExamples.good || standaloneExamples.bad ? `
+# Quality Standards: Good vs. Bad Test Cases
+
+${standaloneExamples.bad ? `
+## ❌ BAD TEST CASES (Red Flags to Look For)
+
+${standaloneExamples.bad}
+
+` : ''}
+${standaloneExamples.good ? `
+## ✅ GOOD TEST CASES (Quality Standard)
+
+${standaloneExamples.good}
+
+` : ''}
+Compare the test cases under review against these quality standards.
+` : '';
+
   return `${knowledgeContext}
 
 ${dodContext}
 
 ${examplesContext}
+
+${qualityExamplesContext}
 
 # Test Cases to Review
 
@@ -719,6 +835,7 @@ Review the test cases above and evaluate them against:
 ${definitionOfDone.length > 0 ? '- The Definition of Done criteria' : '- General quality standards'}
 - The GL Assessment testing standards provided
 ${examples.length > 0 ? '- The example test cases for comparison' : ''}
+${standaloneExamples.good || standaloneExamples.bad ? '- The good/bad quality examples (ensure they match good examples, avoid bad example mistakes)' : ''}
 
 Provide a structured review in this format:
 
@@ -808,6 +925,7 @@ Keep your response concise and focused.`;
 
 async function improveTestCasesWithFeedback(pbiData, previousTestCases, userFeedback, additionalContext) {
   const knowledge = loadKnowledgeBase();
+  const standaloneExamples = loadStandaloneTestCaseExamples();
   const definitionOfDone = loadDefinitionOfDone();
 
   console.log('');
@@ -830,6 +948,23 @@ ${knowledge.glossary}
 ${knowledge.platformOverview}
 
 ---
+
+${standaloneExamples.good || standaloneExamples.bad ? `
+# QUALITY STANDARDS
+
+${standaloneExamples.bad ? `
+## ❌ Avoid These Mistakes
+
+${standaloneExamples.bad}
+
+` : ''}
+${standaloneExamples.good ? `
+## ✅ Follow This Quality Standard
+
+${standaloneExamples.good}
+
+` : ''}
+` : ''}
 `;
   }
 
@@ -906,6 +1041,7 @@ async function generateTestCasesWithQuality(pbiData, additionalContext) {
   const MAX_ITERATIONS = 3;
   const knowledge = loadKnowledgeBase();
   const examples = loadExamples();
+  const standaloneExamples = loadStandaloneTestCaseExamples();
   const definitionOfDone = loadDefinitionOfDone();
 
   console.log('');
@@ -949,6 +1085,22 @@ ${example.testCases}
 ---
 `).join('\n')}
 
+` : ''}
+${standaloneExamples.good || standaloneExamples.bad ? `
+# QUALITY EXAMPLES: Learn What Makes Good vs. Bad Test Cases
+
+${standaloneExamples.bad ? `
+## ❌ BAD TEST CASES (What NOT to Do)
+
+${standaloneExamples.bad}
+
+` : ''}
+${standaloneExamples.good ? `
+## ✅ GOOD TEST CASES (What TO Do)
+
+${standaloneExamples.good}
+
+` : ''}
 ` : ''}`;
   }
 
