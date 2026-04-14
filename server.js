@@ -127,6 +127,17 @@ app.get('/api/workitem/:id', async (req, res) => {
 
     console.log(`Fetching work item ${workItemId} from project ${project}...`);
 
+    // Sanity check: Azure DevOps work item IDs must fit in Int32 (max 2147483647)
+    // Also check for obviously invalid values
+    if (workItemId > 2147483647 || workItemId < 1 || isNaN(workItemId)) {
+      console.error(`✗ Invalid work item ID: ${req.params.id} (parsed as ${workItemId})`);
+      return res.status(404).json({
+        success: false,
+        error: `Work item ${req.params.id} is not a valid work item ID. Work item IDs must be positive integers less than 2,147,483,647.`,
+        validationError: true
+      });
+    }
+
     const token = getAzureToken();
     const authHandler = azdev.getBearerHandler(token);
     const connection = new azdev.WebApi(DEFAULT_ORG, authHandler);
@@ -177,10 +188,30 @@ app.get('/api/workitem/:id', async (req, res) => {
     res.json({ success: true, data: workItem });
   } catch (error) {
     console.error(`Error fetching work item ${req.params.id}:`, error);
+    console.error('Error type:', typeof error);
+    console.error('Error properties:', Object.keys(error));
+
+    // Log more details about the error structure for debugging
+    if (error.statusCode) console.error('Error statusCode:', error.statusCode);
+    if (error.status) console.error('Error status:', error.status);
+    if (error.code) console.error('Error code:', error.code);
+
     console.error('Error stack:', error.stack);
 
-    // Check if this is a 404 error from Azure DevOps
-    if (error.statusCode === 404 || error.message.includes('404') || error.message.includes('does not exist')) {
+    // Check if this is a 404 error from Azure DevOps (multiple ways to detect)
+    const is404 =
+      error.statusCode === 404 ||
+      error.status === 404 ||
+      error.code === 404 ||
+      (error.message && (
+        error.message.includes('404') ||
+        error.message.includes('does not exist') ||
+        error.message.toLowerCase().includes('not found') ||
+        error.message.includes('Work item') && error.message.includes('does not exist')
+      ));
+
+    if (is404) {
+      console.error('✗ Detected 404: Work item not found');
       return res.status(404).json({
         success: false,
         error: `Work item ${req.params.id} not found. This could mean: (1) The ticket doesn't exist, (2) You don't have permission to view it, or (3) It's in a different project than '${req.query.project || DEFAULT_PROJECT}'.`,
@@ -189,7 +220,20 @@ app.get('/api/workitem/:id', async (req, res) => {
     }
 
     // Check if this is an authentication/authorization error
-    if (error.statusCode === 401 || error.statusCode === 403 || error.message.includes('unauthorized') || error.message.includes('forbidden')) {
+    const isAuthError =
+      error.statusCode === 401 ||
+      error.statusCode === 403 ||
+      error.status === 401 ||
+      error.status === 403 ||
+      (error.message && (
+        error.message.includes('unauthorized') ||
+        error.message.includes('forbidden') ||
+        error.message.includes('Access denied') ||
+        error.message.includes('authentication')
+      ));
+
+    if (isAuthError) {
+      console.error('✗ Detected auth error: Access denied');
       return res.status(403).json({
         success: false,
         error: `Access denied for work item ${req.params.id}. Please check your Azure DevOps permissions and PAT token.`,
@@ -197,10 +241,35 @@ app.get('/api/workitem/:id', async (req, res) => {
       });
     }
 
+    // Check if this is a 400 Bad Request (invalid work item ID format)
+    const is400BadRequest =
+      error.statusCode === 400 ||
+      error.status === 400 ||
+      (error.message && (
+        error.message.includes('parameter conversion') ||
+        error.message.includes('System.Int32') ||
+        error.message.includes('BadRequest')
+      )) ||
+      (error.result && error.result.value && error.result.value.Message && (
+        error.result.value.Message.includes('parameter conversion') ||
+        error.result.value.Message.includes('System.Int32')
+      ));
+
+    if (is400BadRequest) {
+      console.error('✗ Detected 400 Bad Request: Invalid work item ID format');
+      return res.status(404).json({
+        success: false,
+        error: `Work item ${req.params.id} is not a valid work item ID. Please check the ID and try again.`,
+        validationError: true
+      });
+    }
+
     // Generic error
+    console.error('✗ Unhandled error type, returning 500');
     res.status(500).json({
       success: false,
       error: error.message || 'An error occurred while fetching the work item',
+      details: `Error type: ${typeof error}, Status: ${error.statusCode || error.status || 'unknown'}`,
       stack: error.stack
     });
   }
