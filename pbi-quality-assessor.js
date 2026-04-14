@@ -381,6 +381,8 @@ Provide your assessment in the JSON format specified.`;
           content: userPrompt
         }
       ]
+      // Note: Extended thinking not supported by AWS Bedrock API
+      // Would need to migrate to Anthropic's native API to enable thinking parameter
     };
   }
 }

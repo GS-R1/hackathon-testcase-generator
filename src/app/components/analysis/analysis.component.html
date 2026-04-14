@@ -67,7 +67,7 @@
         <span class="quality-category">{{ qualityAssessment.quality_category }}</span>
         <span class="quality-score">Score: {{ qualityAssessment.overall_score }}/100</span>
         <span class="quality-confidence" [ngClass]="'confidence-' + qualityAssessment.confidence_level.toLowerCase()">
-          <strong>Confidence: {{ qualityAssessment.confidence_level }}</strong>
+          <strong>Score Confidence: {{ qualityAssessment.confidence_level }}</strong>
         </span>
       </div>
 
@@ -76,20 +76,20 @@
       </div>
 
       <div class="context-prompt" *ngIf="showContextForm && qualityAssessment?.improvement_points?.length">
-        <h4>Provide Additional Context</h4>
-        <p>Fill in the information below to improve test generation quality:</p>
-
-        <div class="improvement-point" *ngFor="let point of qualityAssessment.improvement_points; let i = index">
-          <label>
-            <strong>{{ point.label }}</strong>
-            <span class="prompt-text">{{ point.prompt }}</span>
-          </label>
-          <textarea
-            [(ngModel)]="improvementResponses[i]"
-            class="context-textarea"
-            [placeholder]="point.prompt"
-            rows="3"></textarea>
+        <h4>Missing Information</h4>
+        <div class="missing-keywords">
+          <span class="keyword-badge" *ngFor="let point of qualityAssessment.improvement_points">
+            {{ point.label }}
+          </span>
         </div>
+
+        <p class="consolidated-prompt">{{ getConsolidatedPrompt() }}</p>
+
+        <textarea
+          [(ngModel)]="consolidatedResponse"
+          class="context-textarea-single"
+          placeholder="Provide the missing information here..."
+          rows="6"></textarea>
       </div>
 
       <button class="btn btn-secondary" (click)="toggleContextForm()" *ngIf="qualityAssessment?.improvement_points?.length">

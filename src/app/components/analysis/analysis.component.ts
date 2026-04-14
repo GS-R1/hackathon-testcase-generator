@@ -52,6 +52,7 @@ export class AnalysisComponent {
   qualityAssessmentLoading: boolean = false;
   qualityAssessmentError: string = '';
   improvementResponses: Record<number, string> = {};
+  consolidatedResponse: string = '';
   showContextForm: boolean = false;
 
   analysisResults: AnalysisResult[] = [];
@@ -141,15 +142,25 @@ export class AnalysisComponent {
   buildAdditionalContext(): string {
     if (!this.qualityAssessment?.improvement_points) return '';
 
-    const contextParts: string[] = [];
-    this.qualityAssessment.improvement_points.forEach((point, index) => {
-      const response = this.improvementResponses[index];
-      if (response && response.trim()) {
-        contextParts.push(`${point.label}: ${response}`);
-      }
-    });
+    // Use consolidated response if available
+    if (this.consolidatedResponse && this.consolidatedResponse.trim()) {
+      const keywords = this.qualityAssessment.improvement_points
+        .map(p => p.label)
+        .join(', ');
+      return `Additional context for missing information (${keywords}):\n\n${this.consolidatedResponse}`;
+    }
 
-    return contextParts.length > 0 ? contextParts.join('\n\n') : '';
+    return '';
+  }
+
+  getConsolidatedPrompt(): string {
+    if (!this.qualityAssessment?.improvement_points) return '';
+
+    const prompts = this.qualityAssessment.improvement_points
+      .map(point => point.prompt)
+      .join(' ');
+
+    return `Please provide information about: ${prompts}`;
   }
 
   async generateTestCases(withFeedback: boolean = false) {
@@ -235,6 +246,7 @@ export class AnalysisComponent {
     this.qualityAssessmentLoading = false;
     this.qualityAssessmentError = '';
     this.improvementResponses = {};
+    this.consolidatedResponse = '';
     this.showContextForm = false;
     this.error = '';
   }
