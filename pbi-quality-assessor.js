@@ -265,6 +265,7 @@ Provide your assessment in the following JSON structure:
     "definition_of_done": 0-100,
     "context_and_detail": 0-100
   },
+  "missing_keywords": ["Keyword1", "Keyword2", "Keyword3"],
   "improvement_points": [
     {
       "label": "Brief label for what's missing or needs improvement",
@@ -274,10 +275,19 @@ Provide your assessment in the following JSON structure:
   "summary": "2-3 sentence summary of the assessment"
 }
 
-For improvement_points, be concise and actionable. Each point should:
-- Have a clear label (e.g., "Business Value Metrics", "Performance Requirements", "Security Considerations")
-- Include a specific prompt asking what information is needed (e.g., "What metrics will measure success?", "What response time is required?")
-- Focus only on missing or unclear elements that would improve implementation quality
+For missing_keywords:
+- Include ALL missing or unclear elements (just short 2-4 word labels)
+- This provides visibility of everything that could be improved
+- Keep labels concise (e.g., "Business Value", "Performance Requirements", "Security Details", "Definition of Done")
+
+For improvement_points (the critical questions to ask):
+- **ONLY include 3-5 of the MOST CRITICAL items** - not everything from missing_keywords
+- Prioritize what would have the biggest impact on successful implementation
+- Focus on information gaps that would block or seriously impede development work
+- Each point should have:
+  - label: Brief 2-4 word label (should match one from missing_keywords)
+  - prompt: One short, focused question asking for the specific information needed
+- Skip minor improvements - only include what's truly essential for the user to provide
 
 ## IMPORTANT GUIDELINES
 
