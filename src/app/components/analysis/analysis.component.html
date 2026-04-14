@@ -139,17 +139,67 @@
         </button>
       </div>
 
-      <!-- Quality Score Section (if available) -->
-      <div class="quality-score-section" *ngIf="result.qualityScore">
-        <div class="quality-score-content markdown-content" [innerHTML]="result.qualityScoreHtml">
-        </div>
-        <div class="iterations-info" *ngIf="result.iterations">
-          <small>Generated after {{ result.iterations }} iteration(s)</small>
+      <!-- Additional Information Dropdown (Preamble, Quality Score, Justification, Analysis) -->
+      <div class="collapsible-section" *ngIf="result.preambleHtml || result.qualityScore">
+        <button class="collapsible-header" (click)="toggleAdditionalInfo()">
+          <span class="toggle-icon">{{ showAdditionalInfo ? '▼' : '▶' }}</span>
+          <span>Additional Information (PBI Summary, Quality Assessment, Analysis)</span>
+        </button>
+        <div class="collapsible-content" *ngIf="showAdditionalInfo">
+          <!-- Preamble Content (PBI Summary, Quality Assessment, etc.) -->
+          <div class="preamble-section markdown-content" *ngIf="result.preambleHtml" [innerHTML]="result.preambleHtml">
+          </div>
+
+          <!-- Quality Score Section -->
+          <div class="quality-score-section" *ngIf="result.qualityScore">
+            <div class="quality-score-content markdown-content" [innerHTML]="result.qualityScoreHtml">
+            </div>
+            <div class="iterations-info" *ngIf="result.iterations">
+              <small>Generated after {{ result.iterations }} iteration(s)</small>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div class="result-content markdown-content" [innerHTML]="result.htmlContent">
+      <!-- Main Test Cases (TC-001 to TC-006) -->
+      <div class="result-content markdown-content" [innerHTML]="result.mainTestCasesHtml">
       </div>
+
+      <!-- Additional Test Cases Dropdown (only show for focused generation on most recent result) -->
+      <div class="collapsible-section" *ngIf="result.isFocusedGeneration && last">
+        <button class="collapsible-header" (click)="toggleAdditionalTests()">
+          <span class="toggle-icon">{{ showAdditionalTests ? '▼' : '▶' }}</span>
+          <span>Additional Test Cases (Not Yet Generated)</span>
+        </button>
+        <div class="collapsible-content" *ngIf="showAdditionalTests">
+          <!-- Generate All Button -->
+          <div class="generate-all-section">
+            <div class="info-banner">
+              <span class="info-icon">ℹ️</span>
+              <div class="info-content">
+                <p><strong>Generate Additional Tests</strong></p>
+                <p>The system identified that more tests could be valuable for comprehensive coverage.</p>
+                <p>Click the button below to generate a complete test plan with all additional test cases including:</p>
+                <ul>
+                  <li>Additional acceptance criteria tests</li>
+                  <li>Edge cases and boundary tests</li>
+                  <li>Negative test scenarios</li>
+                  <li>Accessibility and cross-browser tests</li>
+                  <li>Security and performance checks</li>
+                </ul>
+              </div>
+            </div>
+            <button
+              class="btn btn-primary"
+              (click)="generateTestCases(false, true)"
+              [disabled]="loading"
+            >
+              {{ loading ? 'Generating All Tests...' : 'Generate All Remaining Tests' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div class="result-timestamp">
         Generated at {{ result.timestamp | date:'short' }}
       </div>
