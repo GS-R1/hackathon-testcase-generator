@@ -71,9 +71,17 @@
         </span>
       </div>
 
-      <div class="quality-summary">
+      <button class="btn btn-small btn-justification" (click)="toggleJustification()">
+        {{ showJustification ? '▼' : '▶' }} Justification
+      </button>
+
+      <div class="quality-summary" *ngIf="showJustification">
         <p>{{ qualityAssessment.summary }}</p>
       </div>
+
+      <button class="btn btn-small btn-context" (click)="toggleContextForm()" *ngIf="qualityAssessment?.missing_keywords?.length">
+        {{ showContextForm ? '▼' : '▶' }} Additional Context
+      </button>
 
       <div class="context-prompt" *ngIf="showContextForm && qualityAssessment?.missing_keywords?.length">
         <h4>Missing Information</h4>
@@ -91,10 +99,6 @@
           placeholder="Provide the missing information here..."
           rows="6"></textarea>
       </div>
-
-      <button class="btn btn-secondary" (click)="toggleContextForm()" *ngIf="qualityAssessment?.missing_keywords?.length">
-        {{ showContextForm ? 'Hide' : 'Add' }} Additional Context
-      </button>
     </div>
   </div>
 

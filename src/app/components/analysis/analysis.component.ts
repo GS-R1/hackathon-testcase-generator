@@ -55,6 +55,7 @@ export class AnalysisComponent {
   improvementResponses: Record<number, string> = {};
   consolidatedResponse: string = '';
   showContextForm: boolean = false;
+  showJustification: boolean = false;
 
   analysisResults: AnalysisResult[] = [];
   userFeedback: string = '';
@@ -93,6 +94,20 @@ export class AnalysisComponent {
       if (result.success) {
         this.itemData = result.data;
 
+        // Validate work item data before proceeding to Agent calls
+        if (!this.itemData?.fields || Object.keys(this.itemData.fields).length === 0) {
+          this.error = 'Retrieved work item has no fields. Please check your permissions for this item.';
+          this.loading = false;
+          return;
+        }
+
+        // Check for essential fields
+        if (!this.itemData.fields['System.Title']) {
+          this.error = 'Work item is missing essential data. You may not have sufficient permissions to view this item.';
+          this.loading = false;
+          return;
+        }
+
         // Auto-assess PBI quality when fetched
         await this.assessPBIQuality();
       } else {
@@ -109,6 +124,19 @@ export class AnalysisComponent {
     this.qualityAssessmentLoading = true;
     this.qualityAssessmentError = '';
     this.qualityAssessment = null;
+
+    // Validate work item data before calling Agent
+    if (!this.itemData?.fields || Object.keys(this.itemData.fields).length === 0) {
+      this.qualityAssessmentError = 'Cannot assess quality: work item has no fields';
+      this.qualityAssessmentLoading = false;
+      return;
+    }
+
+    if (!this.itemData.fields['System.Title']) {
+      this.qualityAssessmentError = 'Cannot assess quality: work item missing essential data';
+      this.qualityAssessmentLoading = false;
+      return;
+    }
 
     try {
       console.log('Auto-assessing PBI quality...');
@@ -158,9 +186,10 @@ export class AnalysisComponent {
     }
 
     // Create a concise prompt using only the critical improvement points (3-5 items)
+    // Format as numbered list
     const prompts = this.qualityAssessment.improvement_points
-      .map(point => point.prompt)
-      .join(' ');
+      .map((point, index) => `${index + 1}. ${point.prompt}`)
+      .join('\n');
 
     return prompts;
   }
@@ -168,6 +197,17 @@ export class AnalysisComponent {
   async generateTestCases(withFeedback: boolean = false) {
     if (!this.itemData) {
       this.error = 'Please fetch a PBI first';
+      return;
+    }
+
+    // Validate work item data before calling Agent
+    if (!this.itemData?.fields || Object.keys(this.itemData.fields).length === 0) {
+      this.error = 'Work item data is incomplete. Please fetch a valid PBI with proper permissions.';
+      return;
+    }
+
+    if (!this.itemData.fields['System.Title']) {
+      this.error = 'Work item is missing essential data required for test case generation.';
       return;
     }
 
@@ -250,6 +290,7 @@ export class AnalysisComponent {
     this.improvementResponses = {};
     this.consolidatedResponse = '';
     this.showContextForm = false;
+    this.showJustification = false;
     this.error = '';
   }
 
@@ -269,5 +310,9 @@ export class AnalysisComponent {
 
   toggleContextForm() {
     this.showContextForm = !this.showContextForm;
+  }
+
+  toggleJustification() {
+    this.showJustification = !this.showJustification;
   }
 }
