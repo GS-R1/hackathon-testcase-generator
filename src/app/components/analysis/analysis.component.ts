@@ -15,6 +15,25 @@ interface AnalysisResult {
   iterations?: number;
 }
 
+interface QualityAssessment {
+  quality_category: 'GOOD' | 'OK' | 'BAD';
+  confidence_level: 'HIGH' | 'MEDIUM' | 'LOW';
+  overall_score: number;
+  category_scores: {
+    user_story_clarity: number;
+    acceptance_criteria: number;
+    business_value: number;
+    technical_requirements: number;
+    definition_of_done: number;
+    context_and_detail: number;
+  };
+  improvement_points: Array<{
+    label: string;
+    prompt: string;
+  }>;
+  summary: string;
+}
+
 @Component({
   selector: 'app-analysis',
   standalone: true,
@@ -29,6 +48,11 @@ export class AnalysisComponent {
   loading: boolean = false;
   error: string = '';
   itemData: any = null;
+  qualityAssessment: QualityAssessment | null = null;
+  qualityAssessmentLoading: boolean = false;
+  qualityAssessmentError: string = '';
+  improvementResponses: Record<number, string> = {};
+  showContextForm: boolean = false;
 
   analysisResults: AnalysisResult[] = [];
   userFeedback: string = '';
@@ -66,6 +90,9 @@ export class AnalysisComponent {
 
       if (result.success) {
         this.itemData = result.data;
+
+        // Auto-assess PBI quality when fetched
+        await this.assessPBIQuality();
       } else {
         this.error = result.error || 'Failed to fetch PBI';
       }
@@ -74,6 +101,55 @@ export class AnalysisComponent {
     } finally {
       this.loading = false;
     }
+  }
+
+  async assessPBIQuality() {
+    this.qualityAssessmentLoading = true;
+    this.qualityAssessmentError = '';
+    this.qualityAssessment = null;
+
+    try {
+      console.log('Auto-assessing PBI quality...');
+      const result = await this.apiService.analyzeWithClaude(this.itemData, 'pbiQualityAssessment');
+
+      if (result.success) {
+        // Parse JSON response
+        try {
+          const jsonMatch = result.data.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            this.qualityAssessment = JSON.parse(jsonMatch[0]);
+            console.log('Quality assessment:', this.qualityAssessment);
+          } else {
+            this.qualityAssessmentError = 'Failed to parse quality assessment response';
+          }
+        } catch (parseError) {
+          console.error('Failed to parse quality assessment JSON:', parseError);
+          console.log('Raw response:', result.data);
+          this.qualityAssessmentError = 'Failed to parse quality assessment';
+        }
+      } else {
+        this.qualityAssessmentError = result.error || 'Quality assessment failed';
+      }
+    } catch (error: any) {
+      console.error('Error assessing PBI quality:', error);
+      this.qualityAssessmentError = error.message || 'Failed to assess PBI quality';
+    } finally {
+      this.qualityAssessmentLoading = false;
+    }
+  }
+
+  buildAdditionalContext(): string {
+    if (!this.qualityAssessment?.improvement_points) return '';
+
+    const contextParts: string[] = [];
+    this.qualityAssessment.improvement_points.forEach((point, index) => {
+      const response = this.improvementResponses[index];
+      if (response && response.trim()) {
+        contextParts.push(`${point.label}: ${response}`);
+      }
+    });
+
+    return contextParts.length > 0 ? contextParts.join('\n\n') : '';
   }
 
   async generateTestCases(withFeedback: boolean = false) {
@@ -95,6 +171,9 @@ export class AnalysisComponent {
       ? this.analysisResults[this.analysisResults.length - 1].content
       : undefined;
 
+    // Build additional context from quality assessment improvement points
+    const additionalContext = this.buildAdditionalContext();
+
     if (!withFeedback) {
       this.analysisResults = [];
       this.userFeedback = '';
@@ -105,7 +184,8 @@ export class AnalysisComponent {
         this.itemData,
         'testCases',
         withFeedback ? this.userFeedback : undefined,
-        previousTestCases
+        previousTestCases,
+        additionalContext || undefined
       );
 
       if (result.success) {
@@ -151,6 +231,29 @@ export class AnalysisComponent {
   clearResults() {
     this.analysisResults = [];
     this.itemData = null;
+    this.qualityAssessment = null;
+    this.qualityAssessmentLoading = false;
+    this.qualityAssessmentError = '';
+    this.improvementResponses = {};
+    this.showContextForm = false;
     this.error = '';
+  }
+
+  getQualityCategoryClass(): string {
+    if (!this.qualityAssessment) return '';
+    const category = this.qualityAssessment.quality_category;
+    return category === 'GOOD' ? 'quality-good' :
+           category === 'OK' ? 'quality-ok' : 'quality-bad';
+  }
+
+  getQualityCategoryIcon(): string {
+    if (!this.qualityAssessment) return '';
+    const category = this.qualityAssessment.quality_category;
+    return category === 'GOOD' ? '✓' :
+           category === 'OK' ? '⚠' : '✗';
+  }
+
+  toggleContextForm() {
+    this.showContextForm = !this.showContextForm;
   }
 }
