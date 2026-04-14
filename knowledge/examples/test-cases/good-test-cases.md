@@ -3,6 +3,11 @@ Test cases should:
 2. formulaic (kept in Given-When-Then format)
 3. contain all necessary information (so there is no need to reach outside the test case to gather more information to execute it)
 
+Show Test Steps in a table format, e.g. like this:
+| GIVEN [...] | |
+| WHEN [...] | THEN [...] |
+so GIVEN and WHEN are each in a separate row, and THEN is to the right of the step it follows, in its own column.
+
 # Test Cases for NGMT report - Filters section
 
 ## Test Case #1 (TC-001): Report Filters - Date Range field
