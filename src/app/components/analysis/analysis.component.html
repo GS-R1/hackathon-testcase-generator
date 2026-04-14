@@ -106,6 +106,12 @@
     <button class="btn btn-success" (click)="generateTestCases()" [disabled]="loading">
       {{ loading ? 'Generating...' : 'Generate Manual Test Cases' }}
     </button>
+
+    <!-- Error display for test case generation -->
+    <div class="error-message" *ngIf="error && !loading">
+      <strong>⚠ Error:</strong> {{ error }}
+      <button class="btn btn-small" (click)="error = ''" style="margin-left: 10px;">Dismiss</button>
+    </div>
   </div>
 
   <div class="results-section" *ngIf="analysisResults.length > 0">
@@ -141,6 +147,13 @@
           If the test cases need improvement, provide specific feedback below and click "Regenerate with Feedback".
           Claude will create improved test cases based on your input.
         </p>
+
+        <!-- Error display for regeneration -->
+        <div class="error-message" *ngIf="error && !loading">
+          <strong>⚠ Error:</strong> {{ error }}
+          <button class="btn btn-small" (click)="error = ''" style="margin-left: 10px;">Dismiss</button>
+        </div>
+
         <textarea
           [(ngModel)]="userFeedback"
           class="feedback-textarea"

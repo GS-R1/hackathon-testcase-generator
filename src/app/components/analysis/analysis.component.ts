@@ -259,10 +259,11 @@ export class AnalysisComponent {
           iterations: result.iterations
         });
 
-        // Clear feedback after successful regeneration
+        // Clear feedback and error after successful regeneration
         if (withFeedback) {
           this.userFeedback = '';
         }
+        this.error = ''; // Clear any previous errors on success
       } else {
         this.error = `Failed to generate test cases: ${result.error}`;
       }

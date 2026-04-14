@@ -145,7 +145,7 @@ app.get('/api/workitem/:id', async (req, res) => {
       console.error(`Work item ${workItemId} returned null/undefined`);
       return res.status(404).json({
         success: false,
-        error: `Work item ${workItemId} not found or you don't have permission to access it.`,
+        error: `Work item ${workItemId} not found. This could mean: (1) The ticket doesn't exist, (2) You don't have permission to view it, or (3) It's in a different project than '${project}'.`,
         validationError: true
       });
     }
@@ -178,7 +178,31 @@ app.get('/api/workitem/:id', async (req, res) => {
   } catch (error) {
     console.error(`Error fetching work item ${req.params.id}:`, error);
     console.error('Error stack:', error.stack);
-    res.status(500).json({ success: false, error: error.message, stack: error.stack });
+
+    // Check if this is a 404 error from Azure DevOps
+    if (error.statusCode === 404 || error.message.includes('404') || error.message.includes('does not exist')) {
+      return res.status(404).json({
+        success: false,
+        error: `Work item ${req.params.id} not found. This could mean: (1) The ticket doesn't exist, (2) You don't have permission to view it, or (3) It's in a different project than '${req.query.project || DEFAULT_PROJECT}'.`,
+        validationError: true
+      });
+    }
+
+    // Check if this is an authentication/authorization error
+    if (error.statusCode === 401 || error.statusCode === 403 || error.message.includes('unauthorized') || error.message.includes('forbidden')) {
+      return res.status(403).json({
+        success: false,
+        error: `Access denied for work item ${req.params.id}. Please check your Azure DevOps permissions and PAT token.`,
+        validationError: true
+      });
+    }
+
+    // Generic error
+    res.status(500).json({
+      success: false,
+      error: error.message || 'An error occurred while fetching the work item',
+      stack: error.stack
+    });
   }
 });
 
