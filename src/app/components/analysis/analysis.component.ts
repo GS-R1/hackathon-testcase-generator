@@ -9,10 +9,14 @@ interface AnalysisResult {
   type: string;
   content: string;
   htmlContent: SafeHtml;
+  preambleHtml?: SafeHtml; // Content before TC-001 (PBI summary, analysis, etc.)
+  mainTestCasesHtml?: SafeHtml;
+  additionalTestsHtml?: SafeHtml;
   timestamp: Date;
   qualityScore?: string;
   qualityScoreHtml?: SafeHtml;
   iterations?: number;
+  isFocusedGeneration?: boolean; // True if this was Happy Path + Top 5 only
 }
 
 interface QualityAssessment {
@@ -56,6 +60,8 @@ export class AnalysisComponent {
   consolidatedResponse: string = '';
   showContextForm: boolean = false;
   showJustification: boolean = false;
+  showAdditionalInfo: boolean = false;
+  showAdditionalTests: boolean = false;
 
   analysisResults: AnalysisResult[] = [];
   userFeedback: string = '';
@@ -198,7 +204,7 @@ export class AnalysisComponent {
     return prompts;
   }
 
-  async generateTestCases(withFeedback: boolean = false) {
+  async generateTestCases(withFeedback: boolean = false, generateAll: boolean = false) {
     if (!this.itemData) {
       this.error = 'Please fetch a PBI first';
       return;
@@ -231,7 +237,8 @@ export class AnalysisComponent {
     // Build additional context from quality assessment improvement points
     const additionalContext = this.buildAdditionalContext();
 
-    if (!withFeedback) {
+    if (!withFeedback && !generateAll) {
+      // Only clear results if this is a new generation (not feedback, not generate-all)
       this.analysisResults = [];
       this.userFeedback = '';
     }
@@ -242,7 +249,8 @@ export class AnalysisComponent {
         'testCases',
         withFeedback ? this.userFeedback : undefined,
         previousTestCases,
-        additionalContext || undefined
+        additionalContext || undefined,
+        generateAll
       );
 
       if (result.success) {
@@ -253,14 +261,31 @@ export class AnalysisComponent {
           qualityScoreHtml = this.sanitizer.sanitize(1, marked.parse(result.qualityScore)) || '';
         }
 
+        // Extract preamble, main test cases, and additional tests
+        const preambleContent = this.extractPreamble(result.data);
+        const mainTestCasesContent = this.extractMainTestCases(result.data);
+        const additionalTestsContent = this.extractAdditionalTestInfo(result.data);
+
+        const preambleHtml = preambleContent
+          ? this.sanitizer.sanitize(1, marked.parse(preambleContent)) || ''
+          : undefined;
+        const mainTestCasesHtml = this.sanitizer.sanitize(1, marked.parse(mainTestCasesContent)) || '';
+        const additionalTestsHtml = additionalTestsContent
+          ? this.sanitizer.sanitize(1, marked.parse(additionalTestsContent)) || ''
+          : undefined;
+
         this.analysisResults.push({
           type: 'testCases',
           content: result.data,
           htmlContent: this.sanitizer.sanitize(1, htmlContent) || '',
+          preambleHtml: preambleHtml,
+          mainTestCasesHtml: mainTestCasesHtml,
+          additionalTestsHtml: additionalTestsHtml,
           timestamp: new Date(),
           qualityScore: result.qualityScore,
           qualityScoreHtml: qualityScoreHtml,
-          iterations: result.iterations
+          iterations: result.iterations,
+          isFocusedGeneration: !generateAll && !withFeedback // Mark as focused if not generating all and not feedback
         });
 
         // Clear feedback and error after successful regeneration
@@ -322,5 +347,63 @@ export class AnalysisComponent {
 
   toggleJustification() {
     this.showJustification = !this.showJustification;
+  }
+
+  toggleAdditionalInfo() {
+    this.showAdditionalInfo = !this.showAdditionalInfo;
+  }
+
+  toggleAdditionalTests() {
+    this.showAdditionalTests = !this.showAdditionalTests;
+  }
+
+  extractPreamble(content: string): string {
+    // Extract everything before the first test case (TC-001)
+    const tc001Match = content.search(/###\s*TC-001/i);
+    if (tc001Match > 0) {
+      return content.substring(0, tc001Match).trim();
+    }
+    return ''; // No preamble found
+  }
+
+  extractMainTestCases(content: string): string {
+    // Extract from TC-001 through TC-006 only (or until Part 2/TC-007)
+    const tc001Match = content.search(/###\s*TC-001/i);
+    if (tc001Match < 0) {
+      return content; // No TC-001 found, return all
+    }
+
+    // Find where to stop: either TC-007 or Part 2
+    const tc007Match = content.search(/###\s*TC-007/i);
+    const part2Match = content.search(/##?\s*(Part 2|Additional Suggested Tests|PART 2)/i);
+
+    // Find the earliest endpoint
+    let endIndex = -1;
+    if (tc007Match > tc001Match && (endIndex === -1 || tc007Match < endIndex)) {
+      endIndex = tc007Match;
+    }
+    if (part2Match > tc001Match && (endIndex === -1 || part2Match < endIndex)) {
+      endIndex = part2Match;
+    }
+
+    if (endIndex > tc001Match) {
+      return content.substring(tc001Match, endIndex).trim();
+    }
+
+    // No endpoint found, return from TC-001 to end
+    return content.substring(tc001Match).trim();
+  }
+
+  extractAdditionalTestInfo(content: string): string {
+    // Extract the Part 2 / Additional Suggested Tests section
+    const part2Match = content.match(/(##?\s*(Part 2|Additional Suggested Tests|PART 2)[\s\S]*)/i);
+    if (part2Match) {
+      return part2Match[0].trim();
+    }
+    return ''; // No additional tests found
+  }
+
+  hasAdditionalTests(content: string): boolean {
+    return content.search(/##?\s*(Part 2|Additional Suggested Tests|PART 2)/i) > 0;
   }
 }
