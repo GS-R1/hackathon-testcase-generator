@@ -1,9 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { ApiService } from '../../services/api.service';
 import { marked } from 'marked';
+import { TestPlanExportModalComponent } from '../test-plan-export-modal/test-plan-export-modal.component';
 
 interface AnalysisResult {
   type: string;
@@ -38,11 +39,11 @@ interface QualityAssessment {
 @Component({
   selector: 'app-analysis',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TestPlanExportModalComponent],
   templateUrl: './analysis.component.html',
   styleUrl: './analysis.component.scss'
 })
-export class AnalysisComponent {
+export class AnalysisComponent implements OnDestroy {
   itemId: string = '';
   project: string = '';
 
@@ -59,6 +60,13 @@ export class AnalysisComponent {
 
   analysisResults: AnalysisResult[] = [];
   userFeedback: string = '';
+  showExportModal: boolean = false;
+  exportSuccess: string = '';
+
+  // Progress tracking
+  generatingDots: string = '';
+  generatingInterval: any = null;
+  progressMessage: string = '';
 
   constructor(
     private apiService: ApiService,
@@ -222,6 +230,8 @@ export class AnalysisComponent {
 
     this.loading = true;
     this.error = '';
+    this.startGeneratingAnimation();
+    this.progressMessage = withFeedback ? 'Regenerating with feedback' : 'Starting tests generation';
 
     // Get the previous test cases if providing feedback
     const previousTestCases = withFeedback && this.analysisResults.length > 0
@@ -242,7 +252,11 @@ export class AnalysisComponent {
         'testCases',
         withFeedback ? this.userFeedback : undefined,
         previousTestCases,
-        additionalContext || undefined
+        additionalContext || undefined,
+        (message: string) => {
+          // Update progress message from server
+          this.progressMessage = message;
+        }
       );
 
       if (result.success) {
@@ -278,7 +292,28 @@ export class AnalysisComponent {
       console.error('Test case generation error:', error);
     } finally {
       this.loading = false;
+      this.stopGeneratingAnimation();
     }
+  }
+
+  startGeneratingAnimation() {
+    this.generatingDots = '';
+    this.generatingInterval = setInterval(() => {
+      if (this.generatingDots === '...') {
+        this.generatingDots = '';
+      } else {
+        this.generatingDots += '.';
+      }
+    }, 500); // Update every 500ms
+  }
+
+  stopGeneratingAnimation() {
+    if (this.generatingInterval) {
+      clearInterval(this.generatingInterval);
+      this.generatingInterval = null;
+    }
+    this.generatingDots = '';
+    this.progressMessage = '';
   }
 
   copyToClipboard(content: string) {
@@ -322,5 +357,35 @@ export class AnalysisComponent {
 
   toggleJustification() {
     this.showJustification = !this.showJustification;
+  }
+
+  openExportModal() {
+    if (!this.analysisResults.length) {
+      this.error = 'No test cases to export';
+      return;
+    }
+
+    this.showExportModal = true;
+  }
+
+  closeExportModal() {
+    this.showExportModal = false;
+  }
+
+  onExported(data: any) {
+    this.exportSuccess = `Successfully exported ${data.testCasesCreated} test case(s) to Azure DevOps!`;
+
+    if (data.testCasesFailed > 0) {
+      this.exportSuccess += ` (${data.testCasesFailed} failed)`;
+    }
+
+    setTimeout(() => {
+      this.exportSuccess = '';
+    }, 8000);
+  }
+
+  ngOnDestroy() {
+    // Clean up intervals to prevent memory leaks
+    this.stopGeneratingAnimation();
   }
 }

@@ -103,9 +103,15 @@
   </div>
 
   <div class="analysis-options" *ngIf="itemData">
-    <button class="btn btn-success" (click)="generateTestCases()" [disabled]="loading">
-      {{ loading ? 'Generating...' : 'Generate Manual Test Cases' }}
+    <button class="btn btn-success btn-generate" (click)="generateTestCases()" [disabled]="loading">
+      <span *ngIf="loading">Generating<span class="dots">{{ generatingDots }}</span></span>
+      <span *ngIf="!loading">Generate Manual Test Cases</span>
     </button>
+
+    <!-- Progress message -->
+    <div class="progress-message" *ngIf="loading && progressMessage">
+      {{ progressMessage }}
+    </div>
 
     <!-- Error display for test case generation -->
     <div class="error-message" *ngIf="error && !loading">
@@ -120,9 +126,17 @@
       <button class="btn btn-secondary" (click)="clearResults()">Clear Results</button>
     </div>
 
+    <!-- Success message for export -->
+    <div class="success-message" *ngIf="exportSuccess">
+      ✓ {{ exportSuccess }}
+    </div>
+
     <div class="result-card" *ngFor="let result of analysisResults; let last = last">
       <div class="result-header">
         <button class="btn btn-small" (click)="copyToClipboard(result.content)">Copy to Clipboard</button>
+        <button class="btn btn-success btn-small" (click)="openExportModal()" *ngIf="last">
+          Export to DevOps Test Plans
+        </button>
       </div>
 
       <!-- Quality Score Section (if available) -->
@@ -161,13 +175,24 @@
           rows="4"
         ></textarea>
         <button
-          class="btn btn-primary"
+          class="btn btn-primary btn-regenerate"
           (click)="generateTestCases(true)"
           [disabled]="loading || !userFeedback.trim()"
         >
-          {{ loading ? 'Regenerating...' : 'Regenerate with Feedback' }}
+          <span *ngIf="loading">Regenerating<span class="dots">{{ generatingDots }}</span></span>
+          <span *ngIf="!loading">Regenerate with Feedback</span>
         </button>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Export Modal -->
+<app-test-plan-export-modal
+  *ngIf="showExportModal"
+  [testCasesMarkdown]="analysisResults[analysisResults.length - 1].content"
+  [pbiId]="itemData?.id"
+  [project]="project"
+  (close)="closeExportModal()"
+  (exported)="onExported($event)">
+</app-test-plan-export-modal>
