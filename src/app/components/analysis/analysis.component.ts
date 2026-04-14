@@ -27,6 +27,7 @@ interface QualityAssessment {
     definition_of_done: number;
     context_and_detail: number;
   };
+  missing_keywords: string[];
   improvement_points: Array<{
     label: string;
     prompt: string;
@@ -140,13 +141,11 @@ export class AnalysisComponent {
   }
 
   buildAdditionalContext(): string {
-    if (!this.qualityAssessment?.improvement_points) return '';
+    if (!this.qualityAssessment?.missing_keywords) return '';
 
     // Use consolidated response if available
     if (this.consolidatedResponse && this.consolidatedResponse.trim()) {
-      const keywords = this.qualityAssessment.improvement_points
-        .map(p => p.label)
-        .join(', ');
+      const keywords = this.qualityAssessment.missing_keywords.join(', ');
       return `Additional context for missing information (${keywords}):\n\n${this.consolidatedResponse}`;
     }
 
@@ -154,13 +153,16 @@ export class AnalysisComponent {
   }
 
   getConsolidatedPrompt(): string {
-    if (!this.qualityAssessment?.improvement_points) return '';
+    if (!this.qualityAssessment?.improvement_points || this.qualityAssessment.improvement_points.length === 0) {
+      return '';
+    }
 
+    // Create a concise prompt using only the critical improvement points (3-5 items)
     const prompts = this.qualityAssessment.improvement_points
       .map(point => point.prompt)
       .join(' ');
 
-    return `Please provide information about: ${prompts}`;
+    return prompts;
   }
 
   async generateTestCases(withFeedback: boolean = false) {

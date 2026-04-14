@@ -75,11 +75,11 @@
         <p>{{ qualityAssessment.summary }}</p>
       </div>
 
-      <div class="context-prompt" *ngIf="showContextForm && qualityAssessment?.improvement_points?.length">
+      <div class="context-prompt" *ngIf="showContextForm && qualityAssessment?.missing_keywords?.length">
         <h4>Missing Information</h4>
         <div class="missing-keywords">
-          <span class="keyword-badge" *ngFor="let point of qualityAssessment.improvement_points">
-            {{ point.label }}
+          <span class="keyword-badge" *ngFor="let keyword of qualityAssessment.missing_keywords">
+            {{ keyword }}
           </span>
         </div>
 
@@ -92,7 +92,7 @@
           rows="6"></textarea>
       </div>
 
-      <button class="btn btn-secondary" (click)="toggleContextForm()" *ngIf="qualityAssessment?.improvement_points?.length">
+      <button class="btn btn-secondary" (click)="toggleContextForm()" *ngIf="qualityAssessment?.missing_keywords?.length">
         {{ showContextForm ? 'Hide' : 'Add' }} Additional Context
       </button>
     </div>
